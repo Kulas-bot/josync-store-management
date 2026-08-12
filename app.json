@@ -20,7 +20,12 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.carlsteam.josync"
+      "package": "com.carlsteam.josync",
+      "queries": [
+        {
+          "package": "com.facebook.orca"
+        }
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -30,6 +35,9 @@
         "projectId": "67567dba-7aa5-445e-a185-21ee39f61f6e"
       }
     },
-    "owner": "carls-team"
+    "owner": "carls-team",
+    "plugins": [
+      "@react-native-community/datetimepicker"
+    ]
   }
 }

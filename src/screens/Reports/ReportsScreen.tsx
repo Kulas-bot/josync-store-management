@@ -10,6 +10,8 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import HeaderBar from '../../components/HeaderBar';
 import {
   MaterialCommunityIcons,
   Ionicons,
@@ -87,15 +89,7 @@ export default function ReportsScreen({ navigation }: any) {
       <StatusBar style="dark" backgroundColor={COLORS.background} />
 
       {/* 1. Header Bar */}
-      <View style={styles.headerBar}>
-        <View style={styles.logoContainer}>
-          <FontAwesome5 name="shopping-basket" size={16} color={COLORS.primary} />
-          <Text style={styles.logoText}>JoSync</Text>
-        </View>
-        <View style={styles.avatarContainer}>
-          <Ionicons name="person" size={17} color="#FFFFFF" />
-        </View>
-      </View>
+      <HeaderBar onBack={() => navigation.goBack()} />
 
       <ScrollView
         style={styles.scrollView}
@@ -104,13 +98,6 @@ export default function ReportsScreen({ navigation }: any) {
       >
         {/* Subheader Title */}
         <View style={styles.subheader}>
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            style={styles.backButton}
-          >
-            <Ionicons name="arrow-back" size={24} color={COLORS.text} />
-          </TouchableOpacity>
           <View style={styles.subheaderTextContainer}>
             <Text style={styles.subheaderTitle}>Ulat</Text>
             <Text style={styles.subheaderSubtitle}>Tingnan ang buod ng takbo ng iyong tindahan.</Text>
@@ -344,33 +331,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
 
-  // ── Header Bar ──
-  headerBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    backgroundColor: COLORS.background,
-  },
-  logoContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.xs,
-  },
-  logoText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORS.primary,
-  },
-  avatarContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+
 
   // ── Scroll Content ──
   scrollView: {

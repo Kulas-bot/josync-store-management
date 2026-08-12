@@ -8,6 +8,7 @@ import {
   TextInput,
   Platform,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,9 +20,10 @@ import {
   Feather,
 } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import HeaderBar from '../../components/HeaderBar';
 import { COLORS, SPACING, ROUNDS } from '../../theme';
 import { RootStackParamList } from '../../navigation/AppNavigator';
-import BottomTabBar from '../../components/BottomTabBar';
+import BottomTabBar, { useBottomBarHeight } from '../../components/BottomTabBar';
 import { borrowerService, LedgerSummaryItem } from '../../services/borrowerService';
 import { dashboardService, DashboardBorrowerSummary } from '../../services/dashboardService';
 
@@ -31,15 +33,18 @@ type Props = NativeStackScreenProps<RootStackParamList, 'AllBorrowers'>;
 
 interface BorrowerUI extends LedgerSummaryItem {
   initials: string;
-  uiStatus: 'PAID' | 'PARTIAL' | 'UNPAID';
+  uiStatus: 'NEW' | 'PAID' | 'PARTIAL' | 'UNPAID';
   avatarBg: string;
 }
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function AllBorrowersScreen({ navigation }: Props) {
+  const bottomBarHeight = useBottomBarHeight();
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState<'ALL' | 'UNPAID' | 'PARTIAL' | 'PAID'>('ALL');
+  const [activeFilter, setActiveFilter] = useState<'ALL' | 'NEW' | 'UNPAID' | 'PARTIAL' | 'PAID'>('ALL');
+  const [currentSort, setCurrentSort] = useState<'NEWEST' | 'DEBT_DESC' | 'DEBT_ASC' | 'ALPHA_ASC' | 'ALPHA_DESC'>('NEWEST');
+  const [sortModalVisible, setSortModalVisible] = useState(false);
   const [borrowers, setBorrowers] = useState<BorrowerUI[]>([]);
   const [summary, setSummary] = useState<DashboardBorrowerSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -63,10 +68,7 @@ export default function AllBorrowersScreen({ navigation }: Props) {
             .join('')
             .toUpperCase() || '?';
 
-        let uiStatus: 'PAID' | 'PARTIAL' | 'UNPAID' = 'PAID';
-        if (b.status === 'HAS BALANCE') {
-          uiStatus = b.totalPayments > 0 ? 'PARTIAL' : 'UNPAID';
-        }
+        const uiStatus = b.status;
 
         return {
           ...b,
@@ -101,6 +103,26 @@ export default function AllBorrowersScreen({ navigation }: Props) {
     return true;
   });
 
+  // Apply sorting dynamically
+  filteredBorrowers.sort((a, b) => {
+    if (currentSort === 'NEWEST') {
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    }
+    if (currentSort === 'DEBT_DESC') {
+      return b.currentBalance - a.currentBalance;
+    }
+    if (currentSort === 'DEBT_ASC') {
+      return a.currentBalance - b.currentBalance;
+    }
+    if (currentSort === 'ALPHA_ASC') {
+      return a.name.localeCompare(b.name);
+    }
+    if (currentSort === 'ALPHA_DESC') {
+      return b.name.localeCompare(a.name);
+    }
+    return 0;
+  });
+
   const handleBorrowerClick = (borrower: BorrowerUI) => {
     navigation.navigate('BorrowerDetails', {
       borrowerId: borrower.id,
@@ -117,15 +139,7 @@ export default function AllBorrowersScreen({ navigation }: Props) {
       <StatusBar style="dark" backgroundColor={COLORS.background} />
 
       {/* 1. Header Bar */}
-      <View style={styles.headerBar}>
-        <View style={styles.logoContainer}>
-          <FontAwesome5 name="shopping-basket" size={16} color={COLORS.primary} />
-          <Text style={styles.logoText}>JoSync</Text>
-        </View>
-        <View style={styles.avatarContainer}>
-          <Ionicons name="person" size={17} color="#FFFFFF" />
-        </View>
-      </View>
+      <HeaderBar onBack={() => navigation.goBack()} />
 
       <ScrollView
         style={styles.scrollView}
@@ -135,13 +149,6 @@ export default function AllBorrowersScreen({ navigation }: Props) {
       >
         {/* Subheader */}
         <View style={styles.subheader}>
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            style={styles.backButton}
-          >
-            <Ionicons name="arrow-back" size={24} color={COLORS.text} />
-          </TouchableOpacity>
           <View style={styles.subheaderTextContainer}>
             <Text style={styles.subheaderTitle}>Lahat ng Nangutang</Text>
             <Text style={styles.subheaderSubtitle}>{(summary?.totalActive || 0)} na Account ng Customer</Text>
@@ -212,6 +219,13 @@ export default function AllBorrowersScreen({ navigation }: Props) {
           </TouchableOpacity>
 
           <TouchableOpacity
+            style={activeFilter === 'NEW' ? styles.chipActive : styles.chipInactive}
+            onPress={() => setActiveFilter('NEW')}
+          >
+            <Text style={activeFilter === 'NEW' ? styles.chipTextActive : styles.chipTextInactive}>Bagong Borrower</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
             style={activeFilter === 'UNPAID' ? styles.chipActive : styles.chipInactive}
             onPress={() => setActiveFilter('UNPAID')}
           >
@@ -236,9 +250,15 @@ export default function AllBorrowersScreen({ navigation }: Props) {
         {/* 5. Borrower List Header */}
         <View style={styles.listHeaderRow}>
           <Text style={styles.listHeaderTitle}>Listahan ng Nangutang</Text>
-          <View style={styles.sortButton}>
-            <Text style={styles.sortButtonText}>Ayusin ▼</Text>
-          </View>
+          <TouchableOpacity
+            style={styles.sortButton}
+            activeOpacity={0.8}
+            onPress={() => setSortModalVisible(true)}
+          >
+            <Text style={styles.sortButtonText}>
+              Ayusin {currentSort === 'NEWEST' ? '▼' : '✓'}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* 6. Borrower List Cards */}
@@ -251,7 +271,11 @@ export default function AllBorrowersScreen({ navigation }: Props) {
               let statusText = '#C87619';
               let statusLabel = 'Bahagyang Bayad';
 
-              if (borrower.uiStatus === 'PAID') {
+              if (borrower.uiStatus === 'NEW') {
+                statusBg = '#EAEFFD';
+                statusText = '#3F51B5';
+                statusLabel = 'Bagong Borrower';
+              } else if (borrower.uiStatus === 'PAID') {
                 statusBg = '#E2F7E6';
                 statusText = '#2D8A4E';
                 statusLabel = 'Bayad na';
@@ -304,12 +328,12 @@ export default function AllBorrowersScreen({ navigation }: Props) {
         </View>
 
         {/* Spacer for bottom navigation and FAB */}
-        <View style={{ height: 110 }} />
+        <View style={{ height: bottomBarHeight + 46 }} />
       </ScrollView>
 
       {/* 7. Floating Action Button */}
       <TouchableOpacity
-        style={styles.fab}
+        style={[styles.fab, { bottom: bottomBarHeight + 16 }]}
         activeOpacity={0.85}
         onPress={handleAddBorrower}
       >
@@ -318,6 +342,92 @@ export default function AllBorrowersScreen({ navigation }: Props) {
       </TouchableOpacity>
 
       <BottomTabBar activeTab="Ledger" navigation={navigation} />
+
+      {/* Sorting Selection Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={sortModalVisible}
+        onRequestClose={() => setSortModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Ayusin ayon sa</Text>
+            
+            <TouchableOpacity
+              style={styles.sortOptionRow}
+              onPress={() => {
+                setCurrentSort('NEWEST');
+                setSortModalVisible(false);
+              }}
+            >
+              <Text style={currentSort === 'NEWEST' ? styles.sortOptionTextActive : styles.sortOptionText}>
+                Pinakabago
+              </Text>
+              {currentSort === 'NEWEST' && <Feather name="check" size={16} color={COLORS.primary} />}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.sortOptionRow}
+              onPress={() => {
+                setCurrentSort('DEBT_DESC');
+                setSortModalVisible(false);
+              }}
+            >
+              <Text style={currentSort === 'DEBT_DESC' ? styles.sortOptionTextActive : styles.sortOptionText}>
+                Pinakamalaking Utang
+              </Text>
+              {currentSort === 'DEBT_DESC' && <Feather name="check" size={16} color={COLORS.primary} />}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.sortOptionRow}
+              onPress={() => {
+                setCurrentSort('DEBT_ASC');
+                setSortModalVisible(false);
+              }}
+            >
+              <Text style={currentSort === 'DEBT_ASC' ? styles.sortOptionTextActive : styles.sortOptionText}>
+                Pinakamaliit na Utang
+              </Text>
+              {currentSort === 'DEBT_ASC' && <Feather name="check" size={16} color={COLORS.primary} />}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.sortOptionRow}
+              onPress={() => {
+                setCurrentSort('ALPHA_ASC');
+                setSortModalVisible(false);
+              }}
+            >
+              <Text style={currentSort === 'ALPHA_ASC' ? styles.sortOptionTextActive : styles.sortOptionText}>
+                A–Z
+              </Text>
+              {currentSort === 'ALPHA_ASC' && <Feather name="check" size={16} color={COLORS.primary} />}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.sortOptionRow}
+              onPress={() => {
+                setCurrentSort('ALPHA_DESC');
+                setSortModalVisible(false);
+              }}
+            >
+              <Text style={currentSort === 'ALPHA_DESC' ? styles.sortOptionTextActive : styles.sortOptionText}>
+                Z–A
+              </Text>
+              {currentSort === 'ALPHA_DESC' && <Feather name="check" size={16} color={COLORS.primary} />}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.modalCloseBtn}
+              onPress={() => setSortModalVisible(false)}
+            >
+              <Text style={styles.modalCloseBtnText}>Kanselahin</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -330,33 +440,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
 
-  // ── Header Bar ──
-  headerBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    backgroundColor: COLORS.background,
-  },
-  logoContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.xs,
-  },
-  logoText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORS.primary,
-  },
-  avatarContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+
 
   // ── Scroll Content ──
   scrollView: {
@@ -602,5 +686,53 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginLeft: SPACING.xs,
   },
-
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.lg,
+  },
+  modalContent: {
+    backgroundColor: COLORS.surface,
+    borderRadius: ROUNDS.md,
+    padding: SPACING.lg,
+    width: '100%',
+    maxWidth: 320,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    marginBottom: SPACING.md,
+    textAlign: 'center',
+  },
+  sortOptionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  sortOptionText: {
+    fontSize: 14,
+    color: COLORS.text,
+  },
+  sortOptionTextActive: {
+    fontWeight: 'bold',
+    color: COLORS.primary,
+  },
+  modalCloseBtn: {
+    alignItems: 'center',
+    paddingVertical: 12,
+    marginTop: SPACING.sm,
+  },
+  modalCloseBtnText: {
+    color: COLORS.primary,
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
 });

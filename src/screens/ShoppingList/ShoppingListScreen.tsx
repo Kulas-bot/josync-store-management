@@ -21,7 +21,8 @@ import {
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../../navigation/AppNavigator';
-import BottomTabBar from '../../components/BottomTabBar';
+import BottomTabBar, { useBottomBarHeight } from '../../components/BottomTabBar';
+import HeaderBar from '../../components/HeaderBar';
 import { COLORS, SPACING, ROUNDS } from '../../theme';
 import { shoppingListService } from '../../services/shoppingListService';
 import { productService } from '../../services/productService';
@@ -49,6 +50,7 @@ const CATEGORY_ICONS: Record<string, { icon: string; emoji: string }> = {
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function ShoppingListScreen({ navigation }: Props) {
+  const bottomBarHeight = useBottomBarHeight();
   const [products, setProducts] = useState<ShoppingProduct[]>([]);
   const [listId, setListId] = useState<string | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
@@ -69,21 +71,8 @@ export default function ShoppingListScreen({ navigation }: Props) {
         categoryService.getAllCategories()
       ]);
 
-      // Sync products that are low/out but not in list
-      for (const product of allProducts) {
-        if (product.stock_status === 'low' || product.stock_status === 'out') {
-          const inList = items.find((i) => i.product_id === product.id);
-          if (!inList) {
-            await shoppingListService.addProductToShoppingList(product.id);
-          }
-        }
-      }
-
-      // Refetch items after sync
-      const freshItems = await shoppingListService.getShoppingListItems(list.id);
-
       // Map to UI state
-      const merged = freshItems.map((item) => {
+      const merged = items.map((item) => {
         const prod = allProducts.find((p) => p.id === item.product_id);
         const cat = allCategories.find((c) => c.id === prod?.category_id);
         return {
@@ -154,15 +143,7 @@ export default function ShoppingListScreen({ navigation }: Props) {
       <StatusBar style="dark" backgroundColor={COLORS.background} />
 
       {/* 1. Header Bar */}
-      <View style={styles.headerBar}>
-        <View style={styles.logoContainer}>
-          <FontAwesome5 name="shopping-basket" size={16} color={COLORS.primary} />
-          <Text style={styles.logoText}>JoSync</Text>
-        </View>
-        <View style={styles.avatarContainer}>
-          <Ionicons name="person" size={17} color="#FFFFFF" />
-        </View>
-      </View>
+      <HeaderBar onBack={() => navigation.goBack()} />
 
       <ScrollView
         style={styles.scrollView}
@@ -312,11 +293,11 @@ export default function ShoppingListScreen({ navigation }: Props) {
         )}
 
         {/* Bottom spacer so sticky button doesn't overlap last row */}
-        <View style={{ height: 100 }} />
+        <View style={{ height: bottomBarHeight + 46 }} />
       </ScrollView>
 
       {/* 5. Sticky Bottom Action Button */}
-      <View style={styles.stickyButtonContainer}>
+      <View style={[styles.stickyButtonContainer, { bottom: bottomBarHeight + 16 }]}>
         <TouchableOpacity
           style={styles.finishButton}
           activeOpacity={0.85}
@@ -378,33 +359,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
 
-  // ── Header Bar ──
-  headerBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    backgroundColor: COLORS.background,
-  },
-  logoContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.xs,
-  },
-  logoText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORS.primary,
-  },
-  avatarContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+
 
   // ── Scroll Content ──
   scrollView: {
@@ -422,6 +377,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: SPACING.lg,
   },
+
   subheaderLeft: {
     flex: 1,
     paddingRight: SPACING.sm,

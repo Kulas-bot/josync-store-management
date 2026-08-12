@@ -20,9 +20,12 @@ import {
 } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
+import HeaderBar from '../../components/HeaderBar';
 import { COLORS, SPACING, ROUNDS } from '../../theme';
 import { RootStackParamList } from '../../navigation/AppNavigator';
 import { dailySalesService } from '../../services/dailySalesService';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import BottomTabBar from '../../components/BottomTabBar';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -34,10 +37,18 @@ type Props = {
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function SalesScreen({ navigation }: Props) {
+  const insets = useSafeAreaInsets();
+  const bottomPadding = insets.bottom;
+  const barHeight = 68 + bottomPadding;
   const [salesAmount, setSalesAmount] = useState('');
   const [notes, setNotes] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  const [isEditing, setIsEditing] = useState(true);
+  const [hasSavedTodaySales, setHasSavedTodaySales] = useState(false);
+  const [originalSalesAmount, setOriginalSalesAmount] = useState('');
+  const [originalNotes, setOriginalNotes] = useState('');
 
   const [dateDisplay, setDateDisplay] = useState({
     weekday: '',
@@ -58,9 +69,17 @@ export default function SalesScreen({ navigation }: Props) {
       if (sale) {
         setSalesAmount(sale.total_amount.toString());
         setNotes(sale.notes || '');
+        setOriginalSalesAmount(sale.total_amount.toString());
+        setOriginalNotes(sale.notes || '');
+        setHasSavedTodaySales(true);
+        setIsEditing(false);
       } else {
         setSalesAmount('');
         setNotes('');
+        setOriginalSalesAmount('');
+        setOriginalNotes('');
+        setHasSavedTodaySales(false);
+        setIsEditing(true);
       }
     } catch (err) {
       console.log(err);
@@ -78,24 +97,47 @@ export default function SalesScreen({ navigation }: Props) {
   const handleSave = async () => {
     const amount = parseFloat(salesAmount);
     if (isNaN(amount) || amount < 0) {
-      Alert.alert('Error', 'Please enter a valid sales amount.');
+      Alert.alert('Maling Halaga', 'Mangyaring maglagay ng tamang halaga ng benta.');
       return;
     }
 
     try {
       await dailySalesService.recordDailySale(dateDisplay.isoDate, amount, notes);
+      setOriginalSalesAmount(salesAmount);
+      setOriginalNotes(notes);
+      setHasSavedTodaySales(true);
+      setIsEditing(false);
       setShowSuccess(true);
       setTimeout(() => {
         setShowSuccess(false);
       }, 4000);
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Error recording sales.');
+      Alert.alert('Error', error.message || 'Error sa pagtala ng benta.');
     }
   };
 
+  const handleRequestNewAmount = () => {
+    Alert.alert(
+      'Bagong halaga ng benta?',
+      'May naitala nang benta para sa ngayong araw. Gusto mo bang maglagay ng bagong halaga?',
+      [
+        { text: 'Kanselahin', style: 'cancel' },
+        {
+          text: 'Oo, Maglagay',
+          onPress: () => setIsEditing(true),
+        },
+      ]
+    );
+  };
+
+  const handleCancelEdit = () => {
+    setSalesAmount(originalSalesAmount);
+    setNotes(originalNotes);
+    setIsEditing(false);
+  };
+
   const handleViewHistory = () => {
-    // TODO: Navigate to Sales History Screen
-    console.log('Navigate to Sales History Screen');
+    navigation.navigate('SalesHistory');
   };
 
   return (
@@ -103,15 +145,7 @@ export default function SalesScreen({ navigation }: Props) {
       <StatusBar style="dark" backgroundColor={COLORS.background} />
 
       {/* 1. Header Bar */}
-      <View style={styles.headerBar}>
-        <View style={styles.logoContainer}>
-          <FontAwesome5 name="shopping-basket" size={16} color={COLORS.primary} />
-          <Text style={styles.logoText}>JoSync</Text>
-        </View>
-        <View style={styles.avatarContainer}>
-          <Ionicons name="person" size={17} color="#FFFFFF" />
-        </View>
-      </View>
+      <HeaderBar onBack={() => navigation.goBack()} />
 
       <ScrollView
         style={styles.scrollView}
@@ -122,22 +156,12 @@ export default function SalesScreen({ navigation }: Props) {
         {/* 2. Subheader Area */}
         <View style={styles.subheader}>
           <View style={styles.subheaderLeft}>
-            <TouchableOpacity
-              onPress={() => navigation.goBack()}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              style={styles.backButton}
-            >
-              <Ionicons name="arrow-back" size={24} color={COLORS.text} />
-            </TouchableOpacity>
             <View style={styles.subheaderTitleContainer}>
               <Text style={styles.subheaderTitle}>Benta Ngayon</Text>
               <Text style={styles.subheaderSubtitle}>Itala ang kabuuang benta ngayong araw</Text>
             </View>
           </View>
 
-          <TouchableOpacity style={styles.historyBtn} onPress={handleViewHistory}>
-            <MaterialCommunityIcons name="calendar-outline" size={22} color={COLORS.text} />
-          </TouchableOpacity>
         </View>
 
         {/* 3. Date Summary Card */}
@@ -155,85 +179,163 @@ export default function SalesScreen({ navigation }: Props) {
           <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 40 }} />
         ) : (
           <>
-            {/* 4. Total Sales Card */}
-        <View style={styles.card}>
-          <Text style={styles.fieldLabel}>Kabuuang Benta</Text>
-          <View style={styles.salesInputRow}>
-            <Text style={styles.currencySymbol}>₱</Text>
-            <TextInput
-              style={styles.salesInput}
-              keyboardType="numeric"
-              placeholder="0.00"
-              placeholderTextColor="#CCCCCC"
-              value={salesAmount}
-              onChangeText={(text) => {
-                // Allow only numeric values & decimals
-                const formatted = text.replace(/[^0-9.]/g, '');
-                setSalesAmount(formatted);
-              }}
-            />
-          </View>
-          <View style={styles.divider} />
-        </View>
+            {/* 4. Display Content based on Editing Mode */}
+            {!isEditing ? (
+              <>
+                {/* Confirmed Daily Sales View */}
+                <View style={[styles.card, styles.confirmedCard]}>
+                  <Text style={styles.fieldLabel}>Benta Ngayong Araw</Text>
+                  <Text style={styles.confirmedAmount}>
+                    ₱{parseFloat(salesAmount || '0').toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </Text>
 
-        {/* 5. Notes Card */}
-        <View style={styles.card}>
-          <View style={styles.fieldLabelRow}>
-            <MaterialCommunityIcons name="note-text-outline" size={16} color={COLORS.text} />
-            <Text style={styles.fieldLabel}>Mga Tala (Opsyonal)</Text>
-          </View>
-          <TextInput
-            style={styles.notesInput}
-            multiline
-            numberOfLines={3}
-            maxLength={150}
-            placeholder="Halimbawa: Maraming bumili dahil may activity sa school."
-            placeholderTextColor={COLORS.textMuted}
-            value={notes}
-            onChangeText={setNotes}
-          />
-        </View>
+                  {originalNotes ? (
+                    <View style={styles.confirmedNotesContainer}>
+                      <Text style={styles.confirmedNotesLabel}>Mga Tala:</Text>
+                      <Text style={styles.confirmedNotesText}>{originalNotes}</Text>
+                    </View>
+                  ) : null}
 
-        {/* Success State Toast Banner */}
-        {showSuccess && (
-          <View style={styles.successBanner}>
-            <MaterialCommunityIcons name="check" size={18} color="#2D8A4E" />
-            <Text style={styles.successBannerText}>
-              Matagumpay na naitala ang benta ngayong araw.
-            </Text>
-          </View>
-        )}
+                  <View style={styles.confirmedBadge}>
+                    <MaterialCommunityIcons name="check-circle" size={16} color="#2D8A4E" style={{ marginRight: 6 }} />
+                    <Text style={styles.confirmedBadgeText}>Naitala na ang benta ngayong araw.</Text>
+                  </View>
+                </View>
 
-        {/* 6. Action Buttons */}
-        <View style={styles.actionsContainer}>
-          <TouchableOpacity
-            style={styles.saveButton}
-            activeOpacity={0.85}
-            onPress={handleSave}
-          >
-            <MaterialCommunityIcons
-              name="content-save-outline"
-              size={18}
-              color="#FFFFFF"
-              style={styles.saveIcon}
-            />
-            <Text style={styles.saveButtonText}>I-save ang Benta Ngayon</Text>
-          </TouchableOpacity>
+                {/* Success State Toast Banner */}
+                {showSuccess && (
+                  <View style={styles.successBanner}>
+                    <MaterialCommunityIcons name="check" size={18} color="#2D8A4E" />
+                    <Text style={styles.successBannerText}>
+                      Matagumpay na naitala ang benta ngayong araw.
+                    </Text>
+                  </View>
+                )}
 
-          <TouchableOpacity
-            style={styles.historyLink}
-            activeOpacity={0.7}
-            onPress={handleViewHistory}
-          >
-            <MaterialCommunityIcons
-              name="history"
-              size={18}
-              color={COLORS.primary}
-              style={styles.historyLinkIcon}
-            />
-            <Text style={styles.historyLinkText}>Tingnan ang Kasaysayan ng Benta</Text>
-          </TouchableOpacity>
-        </View>
+                {/* Confirmed actions */}
+                <View style={styles.actionsContainer}>
+                  <TouchableOpacity
+                    style={styles.saveButton}
+                    activeOpacity={0.85}
+                    onPress={handleRequestNewAmount}
+                  >
+                    <MaterialCommunityIcons
+                      name="pencil-outline"
+                      size={18}
+                      color="#FFFFFF"
+                      style={styles.saveIcon}
+                    />
+                    <Text style={styles.saveButtonText}>Maglagay ng Bagong Halaga</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.historyLink}
+                    activeOpacity={0.7}
+                    onPress={handleViewHistory}
+                  >
+                    <MaterialCommunityIcons
+                      name="history"
+                      size={18}
+                      color={COLORS.primary}
+                      style={styles.historyLinkIcon}
+                    />
+                    <Text style={styles.historyLinkText}>Tingnan ang Kasaysayan</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <>
+                {/* Editable form state */}
+                <View style={styles.card}>
+                  <Text style={styles.fieldLabel}>Kabuuang Benta</Text>
+                  <View style={styles.salesInputRow}>
+                    <Text style={styles.currencySymbol}>₱</Text>
+                    <TextInput
+                      style={styles.salesInput}
+                      keyboardType="numeric"
+                      placeholder="0.00"
+                      placeholderTextColor="#CCCCCC"
+                      value={salesAmount}
+                      onChangeText={(text) => {
+                        // Allow only numeric values & decimals
+                        const formatted = text.replace(/[^0-9.]/g, '');
+                        setSalesAmount(formatted);
+                      }}
+                      autoFocus={hasSavedTodaySales}
+                    />
+                  </View>
+                  <View style={styles.divider} />
+                </View>
+
+                <View style={styles.card}>
+                  <View style={styles.fieldLabelRow}>
+                    <MaterialCommunityIcons name="note-text-outline" size={16} color={COLORS.text} />
+                    <Text style={styles.fieldLabel}>Mga Tala (Opsyonal)</Text>
+                  </View>
+                  <TextInput
+                    style={styles.notesInput}
+                    multiline
+                    numberOfLines={3}
+                    maxLength={150}
+                    placeholder="Halimbawa: Maraming bumili dahil may activity sa school."
+                    placeholderTextColor={COLORS.textMuted}
+                    value={notes}
+                    onChangeText={setNotes}
+                  />
+                </View>
+
+                {/* Success State Toast Banner */}
+                {showSuccess && (
+                  <View style={styles.successBanner}>
+                    <MaterialCommunityIcons name="check" size={18} color="#2D8A4E" />
+                    <Text style={styles.successBannerText}>
+                      Matagumpay na naitala ang benta ngayong araw.
+                    </Text>
+                  </View>
+                )}
+
+                {/* Action buttons */}
+                <View style={styles.actionsContainer}>
+                  <TouchableOpacity
+                    style={styles.saveButton}
+                    activeOpacity={0.85}
+                    onPress={handleSave}
+                  >
+                    <MaterialCommunityIcons
+                      name="content-save-outline"
+                      size={18}
+                      color="#FFFFFF"
+                      style={styles.saveIcon}
+                    />
+                    <Text style={styles.saveButtonText}>I-save ang Benta Ngayon</Text>
+                  </TouchableOpacity>
+
+                  {hasSavedTodaySales && (
+                    <TouchableOpacity
+                      style={styles.cancelButton}
+                      activeOpacity={0.75}
+                      onPress={handleCancelEdit}
+                    >
+                      <Text style={styles.cancelButtonText}>Kanselahin ang Pag-edit</Text>
+                    </TouchableOpacity>
+                  )}
+
+                  <TouchableOpacity
+                    style={styles.historyLink}
+                    activeOpacity={0.7}
+                    onPress={handleViewHistory}
+                  >
+                    <MaterialCommunityIcons
+                      name="history"
+                      size={18}
+                      color={COLORS.primary}
+                      style={styles.historyLinkIcon}
+                    />
+                    <Text style={styles.historyLinkText}>Tingnan ang Kasaysayan</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
 
           </>
         )}
@@ -242,60 +344,7 @@ export default function SalesScreen({ navigation }: Props) {
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      {/* 7. Mock Bottom Navigation Bar */}
-      <View style={styles.bottomTabBar}>
-        {/* Home */}
-        <TouchableOpacity
-          style={styles.tabButton}
-          activeOpacity={0.8}
-          onPress={() => navigation.navigate('Dashboard')}
-        >
-          <MaterialCommunityIcons name="storefront-outline" size={22} color={COLORS.textMuted} />
-          <Text style={styles.inactiveTabText}>Bahay</Text>
-        </TouchableOpacity>
-
-        {/* Inventory */}
-        <TouchableOpacity
-          style={styles.tabButton}
-          activeOpacity={0.8}
-          onPress={() => navigation.navigate('Inventory')}
-        >
-          <View style={styles.activeTabOutline}>
-            <MaterialCommunityIcons name="archive" size={22} color={COLORS.primary} />
-          </View>
-          <Text style={styles.activeTabText}>Paninda</Text>
-        </TouchableOpacity>
-
-        {/* List */}
-        <TouchableOpacity
-          style={styles.tabButton}
-          activeOpacity={0.8}
-          onPress={() => navigation.navigate('ShoppingList')}
-        >
-          <MaterialCommunityIcons name="format-list-bulleted" size={22} color={COLORS.textMuted} />
-          <Text style={styles.inactiveTabText}>Listahan</Text>
-        </TouchableOpacity>
-
-        {/* Ledger */}
-        <TouchableOpacity
-          style={styles.tabButton}
-          activeOpacity={0.8}
-          onPress={() => navigation.navigate('Ledger')}
-        >
-          <Feather name="book-open" size={22} color={COLORS.textMuted} />
-          <Text style={styles.inactiveTabText}>Utang</Text>
-        </TouchableOpacity>
-
-        {/* Reports */}
-        <TouchableOpacity
-          style={styles.tabButton}
-          activeOpacity={0.8}
-          onPress={() => navigation.navigate('Reports')}
-        >
-          <Ionicons name="bar-chart-outline" size={22} color={COLORS.textMuted} />
-          <Text style={styles.inactiveTabText}>Buod</Text>
-        </TouchableOpacity>
-      </View>
+      <BottomTabBar activeTab="Home" navigation={navigation} />
     </SafeAreaView>
   );
 }
@@ -308,33 +357,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
 
-  // ── Header Bar ──
-  headerBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    backgroundColor: COLORS.background,
-  },
-  logoContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.xs,
-  },
-  logoText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORS.primary,
-  },
-  avatarContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+
 
   // ── Scroll Content ──
   scrollView: {
@@ -524,6 +547,64 @@ const styles = StyleSheet.create({
   },
   historyLinkText: {
     color: COLORS.primary,
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+
+  // ── Confirmed Sales Card styles ──
+  confirmedCard: {
+    borderWidth: 1.5,
+    borderColor: '#AEE9C0',
+    backgroundColor: '#FAFFFB',
+  },
+  confirmedAmount: {
+    fontSize: 36,
+    fontWeight: '800',
+    color: COLORS.text,
+    marginVertical: SPACING.xs,
+  },
+  confirmedNotesContainer: {
+    marginTop: SPACING.sm,
+    backgroundColor: '#F7F6F4',
+    padding: SPACING.sm,
+    borderRadius: ROUNDS.sm,
+  },
+  confirmedNotesLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.textMuted,
+    marginBottom: 2,
+  },
+  confirmedNotesText: {
+    fontSize: 13,
+    color: COLORS.text,
+    lineHeight: 18,
+  },
+  confirmedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E2F7E6',
+    borderRadius: ROUNDS.sm,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    marginTop: SPACING.md,
+  },
+  confirmedBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#2D8A4E',
+  },
+  cancelButton: {
+    borderRadius: ROUNDS.full,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 13,
+    backgroundColor: 'transparent',
+  },
+  cancelButtonText: {
+    color: COLORS.textMuted,
     fontSize: 14,
     fontWeight: 'bold',
   },

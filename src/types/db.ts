@@ -39,6 +39,7 @@ export interface BorrowedItem {
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
+  quantity: number;
 }
 
 export interface Payment {

@@ -11,8 +11,9 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   MaterialCommunityIcons,
   Ionicons,
@@ -20,6 +21,7 @@ import {
   Feather,
 } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import HeaderBar from '../../components/HeaderBar';
 import { useFocusEffect } from '@react-navigation/native';
 import { COLORS, SPACING, ROUNDS } from '../../theme';
 import { RootStackParamList } from '../../navigation/AppNavigator';
@@ -33,16 +35,19 @@ type Props = NativeStackScreenProps<RootStackParamList, 'RecordPayment'>;
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function RecordPaymentScreen({ route, navigation }: Props) {
+  const insets = useSafeAreaInsets();
+  const bottomPadding = insets.bottom;
+  const barHeight = 68 + bottomPadding;
   const { borrowerId, borrowerName } = route.params;
 
   const [outstandingBalance, setOutstandingBalance] = useState(0);
   const [loading, setLoading] = useState(true);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [notes, setNotes] = useState('');
-  const [paymentDate, setPaymentDate] = useState(() => {
-    const today = new Date();
-    return today.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-  });
+  const [paymentDateObject, setPaymentDateObject] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+
+  const formattedPaymentDate = paymentDateObject.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
   // UI state hooks
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -91,11 +96,17 @@ export default function RecordPaymentScreen({ route, navigation }: Props) {
   };
 
   const handleConfirmPayment = async () => {
+    const today = new Date();
+    if (paymentDateObject > today) {
+      Alert.alert('Maling Petsa', 'Hindi maaaring pumili ng petsa sa hinaharap.');
+      return;
+    }
+
     setShowConfirmModal(false);
 
     try {
       setSaving(true);
-      await paymentService.recordPayment(borrowerId, numericAmount, new Date().toISOString(), notes);
+      await paymentService.recordPayment(borrowerId, numericAmount, paymentDateObject.toISOString(), notes);
 
       // Show success snackbar and redirect
       setShowToast(true);
@@ -115,15 +126,7 @@ export default function RecordPaymentScreen({ route, navigation }: Props) {
       <StatusBar style="dark" backgroundColor={COLORS.background} />
 
       {/* 1. Header Bar */}
-      <View style={styles.headerBar}>
-        <View style={styles.logoContainer}>
-          <FontAwesome5 name="shopping-basket" size={16} color={COLORS.primary} />
-          <Text style={styles.logoText}>JoSync</Text>
-        </View>
-        <View style={styles.avatarContainer}>
-          <Ionicons name="person" size={17} color="#FFFFFF" />
-        </View>
-      </View>
+      <HeaderBar onBack={() => navigation.goBack()} />
 
       <ScrollView
         style={styles.scrollView}
@@ -133,13 +136,6 @@ export default function RecordPaymentScreen({ route, navigation }: Props) {
       >
         {/* Subheader */}
         <View style={styles.subheader}>
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            style={styles.backButton}
-          >
-            <Ionicons name="arrow-back" size={24} color={COLORS.text} />
-          </TouchableOpacity>
           <View style={styles.subheaderTextContainer}>
             <Text style={styles.subheaderTitle}>Itala ang Bayad</Text>
             <Text style={styles.subheaderSubtitle}>Itala ang bayad ng customer.</Text>
@@ -205,15 +201,34 @@ export default function RecordPaymentScreen({ route, navigation }: Props) {
           {/* Payment Date Input */}
           <View style={styles.inputGroup}>
             <Text style={styles.fieldLabel}>Petsa ng Bayad</Text>
-            <View style={styles.dateSelector}>
+            <TouchableOpacity
+              style={styles.dateSelector}
+              activeOpacity={0.7}
+              onPress={() => setShowDatePicker(true)}
+            >
               <Feather name="calendar" size={16} color={COLORS.textMuted} style={styles.dateIcon} />
-              <TextInput
-                style={styles.dateInput}
-                value={paymentDate}
-                onChangeText={setPaymentDate}
-              />
-            </View>
+              <Text style={styles.dateInput}>{formattedPaymentDate}</Text>
+            </TouchableOpacity>
           </View>
+
+          {showDatePicker && (
+            <DateTimePicker
+              value={paymentDateObject}
+              mode="date"
+              display="default"
+              maximumDate={new Date()}
+              onChange={(event, selectedDate) => {
+                setShowDatePicker(Platform.OS === 'ios');
+                if (selectedDate) {
+                  if (selectedDate > new Date()) {
+                    Alert.alert('Maling Petsa', 'Hindi maaaring pumili ng petsa sa hinaharap.');
+                    return;
+                  }
+                  setPaymentDateObject(selectedDate);
+                }
+              }}
+            />
+          )}
 
           {/* Notes Input */}
           <View style={styles.inputGroup}>
@@ -321,7 +336,7 @@ export default function RecordPaymentScreen({ route, navigation }: Props) {
             <View style={styles.modalDetails}>
               <View style={styles.modalRow}>
                 <Text style={styles.modalLabel}>Nangutang</Text>
-                <Text style={styles.modalValueBold}>{borrowerName || 'Maria Santos'}</Text>
+                <Text style={styles.modalValueBold}>{borrowerName}</Text>
               </View>
 
               <View style={styles.modalRow}>
@@ -341,7 +356,7 @@ export default function RecordPaymentScreen({ route, navigation }: Props) {
 
               <View style={styles.modalRow}>
                 <Text style={styles.modalLabel}>Petsa ng Bayad</Text>
-                <Text style={styles.modalValue}>{paymentDate}</Text>
+                <Text style={styles.modalValue}>{formattedPaymentDate}</Text>
               </View>
 
               {notes.trim() !== '' ? (
@@ -387,7 +402,7 @@ export default function RecordPaymentScreen({ route, navigation }: Props) {
       )}
 
       {/* 8. Mock Bottom Navigation Bar */}
-      <View style={styles.bottomTabBar}>
+      <View style={[styles.bottomTabBar, { height: barHeight, paddingBottom: bottomPadding }]}>
         {/* Home */}
         <TouchableOpacity
           style={styles.tabButton}
@@ -395,7 +410,7 @@ export default function RecordPaymentScreen({ route, navigation }: Props) {
           onPress={() => navigation.navigate('Dashboard')}
         >
           <MaterialCommunityIcons name="storefront-outline" size={22} color={COLORS.textMuted} />
-          <Text style={styles.inactiveTabText}>Bahay</Text>
+          <Text style={styles.inactiveTabText}>Home</Text>
         </TouchableOpacity>
 
         {/* Inventory */}
@@ -452,33 +467,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
 
-  // ── Header Bar ──
-  headerBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    backgroundColor: COLORS.background,
-  },
-  logoContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.xs,
-  },
-  logoText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORS.primary,
-  },
-  avatarContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+
 
   // ── Scroll Content ──
   scrollView: {

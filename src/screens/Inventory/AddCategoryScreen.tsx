@@ -9,7 +9,7 @@ import {
   Platform,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   MaterialCommunityIcons,
   Ionicons,
@@ -17,6 +17,7 @@ import {
   Feather,
 } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import HeaderBar from '../../components/HeaderBar';
 import { COLORS, SPACING, ROUNDS } from '../../theme';
 import { RootStackParamList } from '../../navigation/AppNavigator';
 import { Alert } from 'react-native';
@@ -42,6 +43,9 @@ const ICON_OPTIONS: IconOption[] = [
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function AddCategoryScreen({ navigation }: Props) {
+  const insets = useSafeAreaInsets();
+  const bottomPadding = insets.bottom;
+  const barHeight = 68 + bottomPadding;
   const [categoryName, setCategoryName] = useState('');
   const [selectedIcon, setSelectedIcon] = useState<IconOption>(ICON_OPTIONS[0]);
 
@@ -58,21 +62,12 @@ export default function AddCategoryScreen({ navigation }: Props) {
     navigation.goBack();
   };
 
-
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <StatusBar style="dark" backgroundColor={COLORS.background} />
 
       {/* 1. Header Bar */}
-      <View style={styles.headerBar}>
-        <View style={styles.logoContainer}>
-          <FontAwesome5 name="shopping-basket" size={16} color={COLORS.primary} />
-          <Text style={styles.logoText}>JoSync</Text>
-        </View>
-        <View style={styles.avatarContainer}>
-          <Ionicons name="person" size={17} color="#FFFFFF" />
-        </View>
-      </View>
+      <HeaderBar onBack={() => navigation.goBack()} />
 
       <ScrollView
         style={styles.scrollView}
@@ -107,7 +102,6 @@ export default function AddCategoryScreen({ navigation }: Props) {
                 name={selectedIcon.iconName as any}
                 size={38}
                 color={COLORS.primary}
-                style={styles.iconCentering}
               />
             </View>
           </View>
@@ -126,39 +120,16 @@ export default function AddCategoryScreen({ navigation }: Props) {
                   onPress={() => setSelectedIcon(option)}
                   activeOpacity={0.8}
                 >
-                  <MaterialCommunityIcons
-                    name={option.iconName as any}
-                    size={22}
-                    color={isSelected ? COLORS.primary : COLORS.textMuted}
-                    style={styles.iconCentering}
-                  />
+                  <View style={styles.iconWrapper}>
+                    <MaterialCommunityIcons
+                      name={option.iconName as any}
+                      size={22}
+                      color={isSelected ? COLORS.primary : COLORS.textMuted}
+                    />
+                  </View>
                 </TouchableOpacity>
               );
             })}
-          </View>
-        </View>
-
-        {/* 4. Live Preview Section */}
-        <View style={styles.section}>
-          <Text style={styles.fieldLabel}>Live Preview</Text>
-          <View style={styles.livePreviewCard}>
-            <View style={styles.livePreviewLeft}>
-              <View style={styles.livePreviewIconCircle}>
-                <MaterialCommunityIcons
-                  name={selectedIcon.iconName as any}
-                  size={22}
-                  color={COLORS.primary}
-                  style={styles.iconCentering}
-                />
-              </View>
-              <View style={styles.livePreviewTextContainer}>
-                <Text style={styles.livePreviewName}>
-                  {categoryName.trim() || (selectedIcon.name === 'Drinks' ? 'Cold Drinks' : selectedIcon.name)}
-                </Text>
-                <Text style={styles.livePreviewSubtitle}>0 paninda sa stock</Text>
-              </View>
-            </View>
-            <Feather name="chevron-right" size={18} color={COLORS.textMuted} />
           </View>
         </View>
 
@@ -189,7 +160,7 @@ export default function AddCategoryScreen({ navigation }: Props) {
       </ScrollView>
 
       {/* 6. Mock Bottom Navigation Bar */}
-      <View style={styles.bottomTabBar}>
+      <View style={[styles.bottomTabBar, { height: barHeight, paddingBottom: bottomPadding }]}>
         {/* Home */}
         <TouchableOpacity
           style={styles.tabButton}
@@ -197,7 +168,7 @@ export default function AddCategoryScreen({ navigation }: Props) {
           onPress={() => navigation.navigate('Dashboard')}
         >
           <MaterialCommunityIcons name="storefront-outline" size={22} color={COLORS.textMuted} />
-          <Text style={styles.inactiveTabText}>Bahay</Text>
+          <Text style={styles.inactiveTabText}>Home</Text>
         </TouchableOpacity>
 
         {/* Inventory (active) */}
@@ -254,38 +225,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
 
-  // ── Header Bar ──
-  headerBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    backgroundColor: COLORS.background,
-  },
-  logoContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.xs,
-  },
-  logoText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORS.primary,
-  },
-  headerTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.textMuted,
-  },
-  avatarContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+
 
   // ── Scroll Content ──
   scrollView: {
@@ -377,44 +317,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#F3EDE4', // soft gray-cream background inactive
   },
 
-  // ── Live Preview Card ──
-  livePreviewCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: COLORS.surface,
-    borderRadius: ROUNDS.md,
-    padding: SPACING.md,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  livePreviewLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.md,
-  },
-  livePreviewIconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#FCEAE3',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  livePreviewTextContainer: {
-    justifyContent: 'center',
-  },
-  livePreviewName: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: COLORS.text,
-    marginBottom: 2,
-  },
-  livePreviewSubtitle: {
-    fontSize: 12,
-    color: COLORS.textMuted,
-  },
-
   // ── Action Buttons ──
   actionsContainer: {
     marginTop: SPACING.md,
@@ -451,9 +353,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
   },
-  iconCentering: {
-    textAlign: 'center',
-    textAlignVertical: 'center',
+  iconWrapper: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: '100%',
   },
 
   // ── Bottom Nav ──

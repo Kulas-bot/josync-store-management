@@ -22,7 +22,8 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { COLORS, SPACING, ROUNDS } from '../../theme';
 import { RootStackParamList } from '../../navigation/AppNavigator';
-import BottomTabBar from '../../components/BottomTabBar';
+import BottomTabBar, { useBottomBarHeight } from '../../components/BottomTabBar';
+import HeaderBar from '../../components/HeaderBar';
 import { categoryService, productService } from '../../services';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -92,6 +93,7 @@ function CategoryRow({ item, isEditing, onPress, onDelete }: CategoryRowProps) {
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function InventoryScreen({ navigation }: Props) {
+  const bottomBarHeight = useBottomBarHeight();
   const [categories, setCategories] = React.useState<Category[]>([]);
   const [totalItems, setTotalItems] = React.useState<number>(0);
   const [lowStockCount, setLowStockCount] = React.useState<number>(0);
@@ -218,23 +220,7 @@ export default function InventoryScreen({ navigation }: Props) {
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <StatusBar style="dark" backgroundColor={COLORS.background} />
 
-      <View style={styles.headerBar}>
-        <View style={styles.headerLeft}>
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            style={styles.backButton}
-          >
-            <Ionicons name="chevron-back" size={22} color={COLORS.primary} />
-          </TouchableOpacity>
-          <FontAwesome5 name="shopping-basket" size={16} color={COLORS.primary} />
-          <Text style={styles.logoText}>JoSync</Text>
-        </View>
-
-        <View style={styles.avatarContainer}>
-          <Ionicons name="person" size={17} color="#FFFFFF" />
-        </View>
-      </View>
+      <HeaderBar onBack={() => navigation.goBack()} />
 
       <ScrollView
         style={styles.scrollView}
@@ -339,16 +325,17 @@ export default function InventoryScreen({ navigation }: Props) {
         )}
 
         {/* Bottom padding so FAB doesn't overlap last content */}
-        <View style={{ height: 90 }} />
+        <View style={{ height: bottomBarHeight + 36 }} />
       </ScrollView>
 
       {/* ── Floating Action Button ── */}
       <TouchableOpacity
-        style={styles.fab}
+        style={[styles.fab, { bottom: bottomBarHeight + 16 }]}
         activeOpacity={0.85}
         onPress={handleAddCategory}
       >
-        <Ionicons name="add" size={28} color="#FFFFFF" />
+        <Ionicons name="add" size={20} color="#FFFFFF" />
+        <Text style={styles.fabText}>Magdagdag</Text>
       </TouchableOpacity>
 
       <BottomTabBar activeTab="Inventory" navigation={navigation} />
@@ -364,41 +351,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
 
-  // ── Header ──
-  headerBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    backgroundColor: COLORS.background,
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.xs,
-  },
-  backButton: {
-    marginRight: 2,
-  },
-  logoText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORS.primary,
-  },
-  headerTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.textMuted,
-  },
-  avatarContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+
 
   // ── Scroll ──
   scrollView: {
@@ -614,17 +567,23 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 84, // Sits just above the tab bar
     right: SPACING.lg,
-    width: 52,
-    height: 52,
-    borderRadius: 26,
     backgroundColor: COLORS.primary,
+    borderRadius: ROUNDS.full,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
     shadowRadius: 8,
     elevation: 6,
+  },
+  fabText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: 'bold',
+    marginLeft: SPACING.xs,
   },
 
 });

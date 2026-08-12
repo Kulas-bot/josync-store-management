@@ -27,6 +27,14 @@ export const paymentService = {
       throw new Error('Payment date is required.');
     }
 
+    const pDate = new Date(paymentDate);
+    const today = new Date();
+    pDate.setHours(0, 0, 0, 0);
+    today.setHours(23, 59, 59, 999);
+    if (pDate.getTime() > today.getTime()) {
+      throw new Error('Hindi maaaring pumili ng petsa sa hinaharap.');
+    }
+
     // Get current balance
     const currentBalance = await borrowerService.getCurrentBalance(borrowerId);
     if (currentBalance === 0) {

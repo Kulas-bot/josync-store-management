@@ -17,6 +17,7 @@ import ReportsScreen from '../screens/Reports/ReportsScreen';
 import AllBorrowersScreen from '../screens/Ledger/AllBorrowersScreen';
 import AddBorrowerScreen from '../screens/Ledger/AddBorrowerScreen';
 import SplashScreen from '../screens/Splash/SplashScreen';
+import SalesHistoryScreen from '../screens/Sales/SalesHistoryScreen';
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -27,6 +28,7 @@ export type RootStackParamList = {
   AddProduct: { categoryId: string; categoryName: string };
   ShoppingList: undefined;
   DailySales: undefined;
+  SalesHistory: undefined;
   Ledger: undefined;
   BorrowerDetails: { borrowerId: string; borrowerName: string };
   AddBorrowedItem: { borrowerId: string; borrowerName: string };
@@ -56,6 +58,7 @@ export default function AppNavigator() {
         <Stack.Screen name="AddProduct" component={AddProductScreen} />
         <Stack.Screen name="ShoppingList" component={ShoppingListScreen} />
         <Stack.Screen name="DailySales" component={SalesScreen} />
+        <Stack.Screen name="SalesHistory" component={SalesHistoryScreen} />
         <Stack.Screen name="Ledger" component={LedgerScreen} />
         <Stack.Screen name="BorrowerDetails" component={BorrowerDetailsScreen} />
         <Stack.Screen name="AddBorrowedItem" component={AddBorrowedItemScreen} />

@@ -8,6 +8,7 @@ import {
   TextInput,
   Platform,
   Alert,
+  Modal,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,10 +19,12 @@ import {
   Feather,
 } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import HeaderBar from '../../components/HeaderBar';
 import { COLORS, SPACING, ROUNDS } from '../../theme';
 import { RootStackParamList } from '../../navigation/AppNavigator';
 import BottomTabBar from '../../components/BottomTabBar';
 import { borrowerService } from '../../services/borrowerService';
+import { Borrower } from '../../types/db';
 
 // ─── Types & Configuration ───────────────────────────────────────────────────
 
@@ -34,16 +37,19 @@ export default function AddBorrowerScreen({ navigation }: Props) {
   const [contactNumber, setContactNumber] = useState('');
   const [address, setAddress] = useState('');
   const [notes, setNotes] = useState('');
+  const [createdBorrower, setCreatedBorrower] = useState<Borrower | null>(null);
+  const [showChoiceModal, setShowChoiceModal] = useState(false);
 
   const handleSave = async () => {
     try {
-      await borrowerService.createBorrower(
+      const borrower = await borrowerService.createBorrower(
         customerName,
         contactNumber || undefined,
         address || undefined,
         notes || undefined
       );
-      navigation.goBack();
+      setCreatedBorrower(borrower);
+      setShowChoiceModal(true);
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Hindi ma-save ang borrower.');
     }
@@ -58,16 +64,7 @@ export default function AddBorrowerScreen({ navigation }: Props) {
       <StatusBar style="dark" backgroundColor={COLORS.background} />
 
       {/* 1. Header Bar */}
-      <View style={styles.headerBar}>
-        <View style={styles.logoContainer}>
-          <FontAwesome5 name="shopping-basket" size={16} color={COLORS.primary} />
-          <Text style={styles.logoText}>JoSync</Text>
-        </View>
-        <Text style={styles.headerTitle}></Text>
-        <View style={styles.avatarContainer}>
-          <Ionicons name="person" size={17} color="#FFFFFF" />
-        </View>
-      </View>
+      <HeaderBar onBack={() => navigation.goBack()} />
 
       <ScrollView
         style={styles.scrollView}
@@ -77,13 +74,6 @@ export default function AddBorrowerScreen({ navigation }: Props) {
       >
         {/* Subheader */}
         <View style={styles.subheader}>
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            style={styles.backButton}
-          >
-            <Ionicons name="arrow-back" size={24} color={COLORS.text} />
-          </TouchableOpacity>
           <View style={styles.subheaderTextContainer}>
             <Text style={styles.subheaderTitle}>Magdagdag ng Nangutang</Text>
             <Text style={styles.subheaderSubtitle}>Gumawa ng bagong account ng customer.</Text>
@@ -199,6 +189,57 @@ export default function AddBorrowerScreen({ navigation }: Props) {
       </ScrollView>
 
       <BottomTabBar activeTab="Ledger" navigation={navigation} />
+
+      {/* Choice Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={showChoiceModal}
+        onRequestClose={() => {
+          setShowChoiceModal(false);
+          navigation.goBack();
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>May hiniram ba siya?</Text>
+            <Text style={styles.modalMessage}>
+              Gusto mo bang magdagdag ng unang hiniram (produkto o cash) para kay {createdBorrower?.name}?
+            </Text>
+
+            <View style={styles.modalActionsVertical}>
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnPrimary]}
+                onPress={() => {
+                  setShowChoiceModal(false);
+                  if (createdBorrower) {
+                    navigation.replace('BorrowerDetails', {
+                      borrowerId: createdBorrower.id,
+                      borrowerName: createdBorrower.name,
+                    });
+                    navigation.navigate('AddBorrowedItem', {
+                      borrowerId: createdBorrower.id,
+                      borrowerName: createdBorrower.name,
+                    });
+                  }
+                }}
+              >
+                <Text style={styles.modalBtnPrimaryText}>+ Magdagdag ng Hiniram</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnSecondary]}
+                onPress={() => {
+                  setShowChoiceModal(false);
+                  navigation.goBack();
+                }}
+              >
+                <Text style={styles.modalBtnSecondaryText}>Mamaya Na</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -211,38 +252,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
 
-  // ── Header Bar ──
-  headerBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    backgroundColor: COLORS.background,
-  },
-  logoContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.xs,
-  },
-  logoText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORS.primary,
-  },
-  headerTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.textMuted,
-  },
-  avatarContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+
 
   // ── Scroll Content ──
   scrollView: {
@@ -437,5 +447,62 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
   },
-
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.lg,
+  },
+  modalContent: {
+    backgroundColor: COLORS.surface,
+    borderRadius: ROUNDS.md,
+    padding: SPACING.lg,
+    width: '100%',
+    maxWidth: 320,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    marginBottom: SPACING.xs,
+    textAlign: 'center',
+  },
+  modalMessage: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    lineHeight: 18,
+    marginBottom: SPACING.md,
+    textAlign: 'center',
+  },
+  modalActionsVertical: {
+    gap: SPACING.sm,
+  },
+  modalBtn: {
+    width: '100%',
+    paddingVertical: 12,
+    borderRadius: ROUNDS.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalBtnPrimary: {
+    backgroundColor: COLORS.primary,
+  },
+  modalBtnPrimaryText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  modalBtnSecondary: {
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+  },
+  modalBtnSecondaryText: {
+    color: COLORS.textMuted,
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
 });

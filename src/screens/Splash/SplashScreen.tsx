@@ -44,15 +44,7 @@ export default function SplashScreen({ navigation }: Props) {
     <View style={styles.container}>
       <StatusBar style="dark" backgroundColor={COLORS.background} />
 
-      {/* 1. Background Watermark Storefront Icon */}
-      <View style={styles.watermarkContainer}>
-        <MaterialCommunityIcons
-          name="storefront"
-          size={280}
-          color={COLORS.primary}
-          style={styles.watermarkIcon}
-        />
-      </View>
+
 
       {/* 2. Animated Center Branding Group */}
       <Animated.View style={[styles.brandingGroup, { opacity: fadeAnim }]}>
@@ -61,9 +53,6 @@ export default function SplashScreen({ navigation }: Props) {
           <FontAwesome5 name="shopping-basket" size={42} color={COLORS.primary} />
           <Text style={styles.logoCardText}>JoSync</Text>
         </View>
-
-        {/* Brand App Name */}
-        <Text style={styles.appName}>JoSync</Text>
 
         {/* Tagline */}
         <Text style={styles.tagline}>

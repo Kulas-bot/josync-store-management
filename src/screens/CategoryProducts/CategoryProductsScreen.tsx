@@ -10,9 +10,10 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  Modal,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   MaterialCommunityIcons,
   Ionicons,
@@ -20,10 +21,11 @@ import {
   Feather,
 } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import HeaderBar from '../../components/HeaderBar';
 import { useFocusEffect } from '@react-navigation/native';
 import { COLORS, SPACING, ROUNDS } from '../../theme';
 import { RootStackParamList } from '../../navigation/AppNavigator';
-import { productService, categoryService } from '../../services';
+import { productService, categoryService, shoppingListService } from '../../services';
 import { Product } from '../../types/db';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -106,11 +108,18 @@ function ProductCard({ product, isEditing, onPress, onDelete }: ProductCardProps
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function CategoryProductsScreen({ route, navigation }: Props) {
+  const insets = useSafeAreaInsets();
+  const bottomPadding = insets.bottom;
+  const barHeight = 68 + bottomPadding;
   const { categoryId, categoryName } = route.params;
 
   const [activeFilter, setActiveFilter] = useState<'ALL' | 'LOW' | 'OUT'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [isEditing, setIsEditing] = useState(false);
+  
+  const [selectedProduct, setSelectedProduct] = useState<ProductUI | null>(null);
+  const [statusModalVisible, setStatusModalVisible] = useState(false);
+  const [promptModalVisible, setPromptModalVisible] = useState(false);
   
   const [products, setProducts] = useState<ProductUI[]>([]);
   const [loading, setLoading] = useState(true);
@@ -154,8 +163,43 @@ export default function CategoryProductsScreen({ route, navigation }: Props) {
   const lowStockCount = products.filter((p) => p.stock_status === 'low').length;
 
   const handleProductPress = (product: ProductUI) => {
-    // TODO: Navigate to Edit Product / Product Details Screen
-    console.log('Product pressed:', product.name);
+    setSelectedProduct(product);
+    setStatusModalVisible(true);
+  };
+
+  const handleStatusChange = async (newStatus: 'high' | 'low' | 'out') => {
+    if (!selectedProduct) return;
+    setStatusModalVisible(false);
+
+    try {
+      if (selectedProduct.stock_status !== newStatus) {
+        await productService.updateStockStatus(selectedProduct.id, newStatus);
+        
+        // If changed to low or out, ask if user wants to add it to Shopping List
+        if (newStatus === 'low' || newStatus === 'out') {
+          const isAlreadyOnList = await shoppingListService.isProductOnActiveShoppingList(selectedProduct.id);
+          if (!isAlreadyOnList) {
+            setPromptModalVisible(true);
+            return;
+          }
+        }
+      }
+      await loadData();
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Hindi ma-update ang status.');
+    }
+  };
+
+  const handleAddToShoppingList = async () => {
+    if (!selectedProduct) return;
+    setPromptModalVisible(false);
+    try {
+      await shoppingListService.addProductToShoppingList(selectedProduct.id);
+      Alert.alert('Tagumpay', `Naidagdag ang "${selectedProduct.name}" sa listahan ng bibilhin.`);
+      await loadData();
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Hindi naidagdag sa listahan.');
+    }
   };
 
   const handleAddProduct = () => {
@@ -195,27 +239,11 @@ export default function CategoryProductsScreen({ route, navigation }: Props) {
       <StatusBar style="dark" backgroundColor={COLORS.background} />
 
       {/* 1. Header Bar */}
-      <View style={styles.headerBar}>
-        <View style={styles.logoContainer}>
-          <FontAwesome5 name="shopping-basket" size={16} color={COLORS.primary} />
-          <Text style={styles.logoText}>JoSync</Text>
-        </View>
-
-        <View style={styles.avatarContainer}>
-          <Ionicons name="person" size={17} color="#FFFFFF" />
-        </View>
-      </View>
+      <HeaderBar onBack={() => navigation.goBack()} />
 
       {/* 2. Category Header & Actions */}
       <View style={styles.categoryHeader}>
         <View style={styles.categoryHeaderLeft}>
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            style={styles.backButton}
-          >
-            <Ionicons name="arrow-back" size={24} color={COLORS.text} />
-          </TouchableOpacity>
           <View style={styles.categoryTitleContainer}>
             <Text style={styles.categoryTitle}>{categoryName || 'Category'}</Text>
             <Text style={styles.categorySubtitle}>I-manage ang mga paninda sa kategoryang ito</Text>
@@ -359,7 +387,7 @@ export default function CategoryProductsScreen({ route, navigation }: Props) {
               onDelete={handleDeleteProduct} 
             />
           )}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, { paddingBottom: barHeight + 36 }]}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
@@ -371,7 +399,7 @@ export default function CategoryProductsScreen({ route, navigation }: Props) {
 
       {/* 6. Floating Action Button */}
       <TouchableOpacity
-        style={styles.fab}
+        style={[styles.fab, { bottom: barHeight + 16 }]}
         activeOpacity={0.85}
         onPress={handleAddProduct}
       >
@@ -380,7 +408,7 @@ export default function CategoryProductsScreen({ route, navigation }: Props) {
       </TouchableOpacity>
 
       {/* 7. Mock Bottom Navigation Bar */}
-      <View style={styles.bottomTabBar}>
+      <View style={[styles.bottomTabBar, { height: barHeight, paddingBottom: bottomPadding }]}>
         {/* Home */}
         <TouchableOpacity
           style={styles.tabButton}
@@ -388,7 +416,7 @@ export default function CategoryProductsScreen({ route, navigation }: Props) {
           onPress={() => navigation.navigate('Dashboard')}
         >
           <MaterialCommunityIcons name="storefront-outline" size={22} color={COLORS.textMuted} />
-          <Text style={styles.inactiveTabText}>Bahay</Text>
+          <Text style={styles.inactiveTabText}>Home</Text>
         </TouchableOpacity>
 
         {/* Inventory (active) */}
@@ -433,6 +461,93 @@ export default function CategoryProductsScreen({ route, navigation }: Props) {
           <Text style={styles.inactiveTabText}>Buod</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Stock Status Selection Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={statusModalVisible}
+        onRequestClose={() => setStatusModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Baguhin ang Stock Status</Text>
+            <Text style={styles.modalSubTitle}>{selectedProduct?.name}</Text>
+            
+            <View style={styles.statusOptionsContainer}>
+              <TouchableOpacity
+                style={[styles.statusOptionBtn, { backgroundColor: '#E2F7E6', borderColor: '#2D8A4E' }]}
+                onPress={() => handleStatusChange('high')}
+              >
+                <View style={[styles.statusDot, { backgroundColor: '#15803D', marginRight: 8 }]} />
+                <Text style={[styles.statusOptionText, { color: '#2D8A4E' }]}>Marami (Plentiful)</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.statusOptionBtn, { backgroundColor: '#FDF0DC', borderColor: '#C87619' }]}
+                onPress={() => handleStatusChange('low')}
+              >
+                <View style={[styles.statusDot, { backgroundColor: '#F59E0B', marginRight: 8 }]} />
+                <Text style={[styles.statusOptionText, { color: '#C87619' }]}>Kaunti (Low Stock)</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.statusOptionBtn, { backgroundColor: '#FCE4E4', borderColor: '#D32F2F' }]}
+                onPress={() => handleStatusChange('out')}
+              >
+                <View style={[styles.statusDot, { backgroundColor: '#DC2626', marginRight: 8 }]} />
+                <Text style={[styles.statusOptionText, { color: '#D32F2F' }]}>Ubos (Out of Stock)</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={styles.modalCancelBtn}
+              onPress={() => setStatusModalVisible(false)}
+            >
+              <Text style={styles.modalCancelBtnText}>Kanselahin</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Suggest Add to Shopping List Prompt Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={promptModalVisible}
+        onRequestClose={() => {
+          setPromptModalVisible(false);
+          loadData();
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Idagdag sa Listahan?</Text>
+            <Text style={styles.modalMessage}>
+              Gusto mo bang idagdag ang "{selectedProduct?.name}" sa listahan ng mga bibilhin?
+            </Text>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnCancel]}
+                onPress={() => {
+                  setPromptModalVisible(false);
+                  loadData();
+                }}
+              >
+                <Text style={styles.modalBtnCancelText}>Hindi Muna</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnFinish]}
+                onPress={handleAddToShoppingList}
+              >
+                <Text style={styles.modalBtnFinishText}>Idagdag</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -445,38 +560,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
 
-  // ── Header Bar ──
-  headerBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    backgroundColor: COLORS.background,
-  },
-  logoContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.xs,
-  },
-  logoText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORS.primary,
-  },
-  headerTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.textMuted,
-  },
-  avatarContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+
 
   // ── Category Header & Actions ──
   categoryHeader: {
@@ -725,5 +809,93 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: COLORS.textMuted,
     marginTop: 2,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.lg,
+  },
+  modalContent: {
+    backgroundColor: COLORS.surface,
+    borderRadius: ROUNDS.md,
+    padding: SPACING.lg,
+    width: '100%',
+    maxWidth: 320,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    marginBottom: SPACING.xs,
+  },
+  modalSubTitle: {
+    fontSize: 14,
+    color: COLORS.textMuted,
+    marginBottom: SPACING.md,
+  },
+  modalMessage: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    lineHeight: 18,
+    marginBottom: SPACING.md,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  modalBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: ROUNDS.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalBtnCancel: {
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+  },
+  modalBtnCancelText: {
+    color: COLORS.textMuted,
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  modalBtnFinish: {
+    backgroundColor: COLORS.primary,
+  },
+  modalBtnFinishText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  statusOptionsContainer: {
+    gap: SPACING.sm,
+    marginBottom: SPACING.md,
+  },
+  statusOptionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: ROUNDS.md,
+    borderWidth: 1,
+  },
+  statusOptionText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  modalCancelBtn: {
+    alignItems: 'center',
+    paddingVertical: 10,
+    marginTop: SPACING.xs,
+  },
+  modalCancelBtnText: {
+    color: COLORS.textMuted,
+    fontSize: 13,
+    fontWeight: 'bold',
   },
 });

@@ -23,7 +23,8 @@ export interface LedgerSummaryItem {
   totalBorrowed: number;
   totalPayments: number;
   currentBalance: number;
-  status: 'PAID' | 'HAS BALANCE';
+  status: 'NEW' | 'PAID' | 'PARTIAL' | 'UNPAID';
+  created_at: string;
 }
 
 export const borrowerService = {
@@ -88,7 +89,8 @@ export const borrowerService = {
     amount: number,
     productId?: string | null,
     notes?: string | null,
-    borrowedAt?: string
+    borrowedAt?: string,
+    quantity: number = 1
   ): Promise<BorrowedItem> {
     // Validate borrower exists
     const borrower = await borrowerRepository.getBorrowerById(borrowerId);
@@ -128,7 +130,8 @@ export const borrowerService = {
       amount,
       finalProductId,
       notes,
-      borrowedAt
+      borrowedAt,
+      quantity
     );
   },
 
@@ -211,7 +214,8 @@ export const borrowerService = {
         totalBorrowed,
         totalPayments,
         currentBalance,
-        status: currentBalance === 0 ? 'PAID' : 'HAS BALANCE'
+        status: totalBorrowed === 0 ? 'NEW' : (currentBalance <= 0 ? 'PAID' : (totalPayments > 0 ? 'PARTIAL' : 'UNPAID')),
+        created_at: b.created_at
       });
     }
 

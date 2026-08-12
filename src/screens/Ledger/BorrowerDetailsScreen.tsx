@@ -7,6 +7,10 @@ import {
   TouchableOpacity,
   Platform,
   ActivityIndicator,
+  Alert,
+  Modal,
+  Clipboard,
+  Linking,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,9 +22,11 @@ import {
 } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
+import HeaderBar from '../../components/HeaderBar';
 import { COLORS, SPACING, ROUNDS } from '../../theme';
 import { RootStackParamList } from '../../navigation/AppNavigator';
 import { borrowerService } from '../../services/borrowerService';
+import { generatePaymentReminder } from '../../utils/reminder';
 import { Borrower, BorrowedItem, Payment } from '../../types/db';
 
 // ─── Types & Configuration ───────────────────────────────────────────────────
@@ -41,6 +47,10 @@ export default function BorrowerDetailsScreen({ route, navigation }: Props) {
 
   const [details, setDetails] = useState<BorrowerDetailsState | null>(null);
   const [loading, setLoading] = useState(true);
+  const [reminderModalVisible, setReminderModalVisible] = useState(false);
+  const [generatedMessage, setGeneratedMessage] = useState('');
+
+  const activeBorrowerName = details?.borrower.name || borrowerName;
 
   const loadData = async () => {
     try {
@@ -61,20 +71,75 @@ export default function BorrowerDetailsScreen({ route, navigation }: Props) {
   );
 
   const handleAddNewItem = () => {
-    navigation.navigate('AddBorrowedItem', { borrowerId, borrowerName });
+    navigation.navigate('AddBorrowedItem', { borrowerId, borrowerName: activeBorrowerName });
   };
 
   const handleRecordPayment = () => {
-    navigation.navigate('RecordPayment', { borrowerId, borrowerName });
+    navigation.navigate('RecordPayment', { borrowerId, borrowerName: activeBorrowerName });
   };
 
   const handleViewPaymentHistory = () => {
-    navigation.navigate('PaymentHistory', { borrowerId, borrowerName });
+    navigation.navigate('PaymentHistory', { borrowerId, borrowerName: activeBorrowerName });
   };
 
   const handleSendReminder = () => {
-    // TODO: Trigger dynamic SMS/WhatsApp reminder popup
-    console.log('Send reminder clicked');
+    if (!details) return;
+    const msg = generatePaymentReminder(activeBorrowerName, details.currentBalance);
+    setGeneratedMessage(msg);
+    setReminderModalVisible(true);
+  };
+
+  const handleCopyMessage = () => {
+    Clipboard.setString(generatedMessage);
+    Alert.alert('Nakopya', 'Nakopya na ang mensahe.');
+  };
+
+  const handleOpenMessenger = async () => {
+    // Copy message first — ready to paste when Messenger opens
+    Clipboard.setString(generatedMessage);
+
+    // Android intent URI targeting Messenger's known package (com.facebook.orca)
+    // This is more reliable than fb-messenger:// which silently resolves even when Messenger is absent
+    const intentUrl = 'intent://user/#Intent;package=com.facebook.orca;scheme=fb-messenger;end';
+    const webFallbackUrl = 'https://m.me';
+
+    console.log('[Reminder] Attempting Messenger launch...');
+    console.log('[Reminder] Messenger launch method: Android intent URI -', intentUrl);
+
+    try {
+      const canOpen = await Linking.canOpenURL(intentUrl);
+      console.log('[Reminder] Launch request accepted (canOpenURL):', canOpen);
+
+      if (canOpen) {
+        await Linking.openURL(intentUrl);
+        console.log('[Reminder] Fallback required: false — Messenger intent dispatched');
+      } else {
+        console.log('[Reminder] Fallback required: true — Messenger not found, trying web fallback');
+        const canOpenWeb = await Linking.canOpenURL(webFallbackUrl);
+        if (canOpenWeb) {
+          await Linking.openURL(webFallbackUrl);
+          console.log('[Reminder] Web Messenger fallback opened');
+        } else {
+          throw new Error('Neither Messenger nor web fallback could be opened');
+        }
+      }
+    } catch (err) {
+      console.error('[Reminder] All Messenger launch methods failed:', err);
+      Alert.alert(
+        'Hindi mabuksan ang Messenger.',
+        'Na-copy na ang reminder. Maaari mo itong i-paste sa Messenger.',
+        [
+          {
+            text: 'Kopyahin ang Mensahe',
+            onPress: () => {
+              Clipboard.setString(generatedMessage);
+              Alert.alert('Nakopya', 'Nakopya na ang mensahe.');
+            },
+          },
+          { text: 'OK', style: 'cancel' },
+        ]
+      );
+    }
   };
 
   return (
@@ -82,15 +147,7 @@ export default function BorrowerDetailsScreen({ route, navigation }: Props) {
       <StatusBar style="dark" backgroundColor={COLORS.background} />
 
       {/* 1. Header Bar */}
-      <View style={styles.headerBar}>
-        <View style={styles.logoContainer}>
-          <FontAwesome5 name="shopping-basket" size={16} color={COLORS.primary} />
-          <Text style={styles.logoText}>JoSync</Text>
-        </View>
-        <View style={styles.avatarContainer}>
-          <Ionicons name="person" size={17} color="#FFFFFF" />
-        </View>
-      </View>
+      <HeaderBar onBack={() => navigation.goBack()} />
 
       <ScrollView
         style={styles.scrollView}
@@ -99,13 +156,6 @@ export default function BorrowerDetailsScreen({ route, navigation }: Props) {
       >
         {/* Subheader */}
         <View style={styles.subheader}>
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            style={styles.backButton}
-          >
-            <Ionicons name="arrow-back" size={24} color={COLORS.text} />
-          </TouchableOpacity>
           <Text style={styles.subheaderTitle}>Detalye ng Nangutang</Text>
         </View>
 
@@ -133,7 +183,7 @@ export default function BorrowerDetailsScreen({ route, navigation }: Props) {
               )}
 
               <View style={styles.balanceContainer}>
-                <Text style={styles.balanceLabel}>Natitirang Bayad</Text>
+                <Text style={styles.balanceLabel}>Natitirang Balanse</Text>
                 <Text style={styles.balanceValue}>₱{(details?.currentBalance || 0).toFixed(2)}</Text>
               </View>
             </View>
@@ -148,7 +198,16 @@ export default function BorrowerDetailsScreen({ route, navigation }: Props) {
               <View style={styles.itemsList}>
                 {details?.borrowedItems.map((item: BorrowedItem) => (
                   <View key={item.id} style={styles.itemRow}>
-                    <Text style={styles.itemName}>{item.item_name}</Text>
+                    <View style={styles.itemRowDetails}>
+                      <Text style={styles.itemName}>
+                        {item.item_name}{item.item_type === 'product' ? ` × ${item.quantity ?? 1}` : ''}
+                      </Text>
+                      {item.item_type === 'product' && (
+                        <Text style={styles.itemSubtext}>
+                          ₱{((item.amount) / (item.quantity ?? 1)).toFixed(2)} bawat isa
+                        </Text>
+                      )}
+                    </View>
                     <Text style={styles.itemPrice}>₱{item.amount.toFixed(2)}</Text>
                   </View>
                 ))}
@@ -226,27 +285,70 @@ export default function BorrowerDetailsScreen({ route, navigation }: Props) {
         </View>
 
         {/* 6. Smart Reminder Card */}
-        <View style={styles.reminderCard}>
-          <View style={styles.reminderLeft}>
-            <View style={styles.reminderIconBadge}>
-              <MaterialCommunityIcons name="bell-outline" size={18} color={COLORS.primary} />
+        {details && details.currentBalance > 0 && (
+          <View style={styles.reminderCard}>
+            <View style={styles.reminderLeft}>
+              <View style={styles.reminderIconBadge}>
+                <MaterialCommunityIcons name="bell-outline" size={18} color={COLORS.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.reminderText}>Magpadala ng reminder?</Text>
+                <Text style={styles.reminderSubText}>Ipaalala ang kasalukuyang balanse.</Text>
+              </View>
             </View>
-            <Text style={styles.reminderText}>
-              Madalas magbayad si Maria tuwing weekend. Magpadala ng reminder?
-            </Text>
+            <TouchableOpacity
+              style={styles.reminderSendBtn}
+              activeOpacity={0.7}
+              onPress={handleSendReminder}
+            >
+              <MaterialCommunityIcons name="send" size={16} color={COLORS.primary} />
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            style={styles.reminderSendBtn}
-            activeOpacity={0.7}
-            onPress={handleSendReminder}
-          >
-            <MaterialCommunityIcons name="send" size={16} color={COLORS.primary} />
-          </TouchableOpacity>
-        </View>
+        )}
 
         {/* Spacer for bottom navigation */}
         <View style={{ height: 100 }} />
       </ScrollView>
+
+      {/* Reminder Confirmation Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={reminderModalVisible}
+        onRequestClose={() => setReminderModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Magpadala ng reminder?</Text>
+            <View style={styles.previewMessageContainer}>
+              <Text style={styles.previewMessageText}>{generatedMessage}</Text>
+            </View>
+
+            <View style={styles.modalActionsVertical}>
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnPrimary]}
+                onPress={handleCopyMessage}
+              >
+                <Text style={styles.modalBtnPrimaryText}>Kopyahin ang Mensahe</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnPrimary]}
+                onPress={handleOpenMessenger}
+              >
+                <Text style={styles.modalBtnPrimaryText}>Buksan ang Messenger</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnSecondary]}
+                onPress={() => setReminderModalVisible(false)}
+              >
+                <Text style={styles.modalBtnSecondaryText}>Kanselahin</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
 
     </SafeAreaView>
@@ -261,33 +363,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
 
-  // ── Header Bar ──
-  headerBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    backgroundColor: COLORS.background,
-  },
-  logoContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.xs,
-  },
-  logoText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORS.primary,
-  },
-  avatarContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+
 
   // ── Scroll Content ──
   scrollView: {
@@ -405,6 +481,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  itemRowDetails: {
+    flex: 1,
+  },
+  itemSubtext: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginTop: 2,
   },
   itemName: {
     fontSize: 14,
@@ -611,5 +695,75 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: COLORS.textMuted,
     marginTop: 2,
+  },
+  reminderSubText: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.lg,
+  },
+  modalContent: {
+    backgroundColor: COLORS.surface,
+    borderRadius: ROUNDS.md,
+    padding: SPACING.lg,
+    width: '100%',
+    maxWidth: 320,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    marginBottom: SPACING.md,
+    textAlign: 'center',
+  },
+  previewMessageContainer: {
+    backgroundColor: '#FAF5EE',
+    borderRadius: ROUNDS.md,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: '#EFECE9',
+    marginBottom: SPACING.lg,
+  },
+  previewMessageText: {
+    fontSize: 13,
+    color: COLORS.text,
+    lineHeight: 18,
+    fontStyle: 'italic',
+  },
+  modalActionsVertical: {
+    gap: SPACING.sm,
+  },
+  modalBtn: {
+    width: '100%',
+    paddingVertical: 12,
+    borderRadius: ROUNDS.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalBtnPrimary: {
+    backgroundColor: COLORS.primary,
+  },
+  modalBtnPrimaryText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  modalBtnSecondary: {
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+  },
+  modalBtnSecondaryText: {
+    color: COLORS.textMuted,
+    fontSize: 13,
+    fontWeight: 'bold',
   },
 });

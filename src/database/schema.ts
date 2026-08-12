@@ -4,7 +4,7 @@
 export const CREATE_CATEGORIES_TABLE = `
   CREATE TABLE IF NOT EXISTS categories (
     id TEXT PRIMARY KEY NOT NULL,
-    name TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     deleted_at TEXT
@@ -50,6 +50,7 @@ export const CREATE_BORROWED_ITEMS_TABLE = `
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     deleted_at TEXT,
+    quantity INTEGER NOT NULL DEFAULT 1,
     FOREIGN KEY (borrower_id) REFERENCES borrowers (id) ON DELETE RESTRICT ON UPDATE CASCADE,
     FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE SET NULL ON UPDATE CASCADE
   );
@@ -136,6 +137,10 @@ export const CREATE_INDEX_DAILY_SALES_DATE = `
   CREATE INDEX IF NOT EXISTS idx_daily_sales_date ON daily_sales (sales_date);
 `;
 
+export const CREATE_INDEX_CATEGORIES_NAME_ACTIVE = `
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_name_active ON categories (name) WHERE deleted_at IS NULL;
+`;
+
 export const SCHEMA_V1_QUERIES = [
   CREATE_CATEGORIES_TABLE,
   CREATE_PRODUCTS_TABLE,
@@ -152,4 +157,5 @@ export const SCHEMA_V1_QUERIES = [
   CREATE_INDEX_SHOPPING_LIST_ITEMS_LIST,
   CREATE_INDEX_SHOPPING_LIST_ITEMS_PRODUCT,
   CREATE_INDEX_DAILY_SALES_DATE,
+  CREATE_INDEX_CATEGORIES_NAME_ACTIVE,
 ];

@@ -12,14 +12,16 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   MaterialCommunityIcons,
   Ionicons,
   FontAwesome5,
   Feather,
 } from '@expo/vector-icons';
+import HeaderBar from '../../components/HeaderBar';
 import { COLORS, SPACING, ROUNDS } from '../../theme';
-import BottomTabBar from '../../components/BottomTabBar';
+import BottomTabBar, { useBottomBarHeight } from '../../components/BottomTabBar';
 import { borrowerService, LedgerSummaryItem } from '../../services/borrowerService';
 import { dashboardService, DashboardBorrowerSummary } from '../../services/dashboardService';
 
@@ -32,6 +34,7 @@ interface BorrowerUI extends LedgerSummaryItem {
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function LedgerScreen({ navigation }: any) {
+  const bottomBarHeight = useBottomBarHeight();
   const [searchQuery, setSearchQuery] = useState('');
   const [borrowers, setBorrowers] = useState<BorrowerUI[]>([]);
   const [summary, setSummary] = useState<DashboardBorrowerSummary | null>(null);
@@ -93,15 +96,7 @@ export default function LedgerScreen({ navigation }: any) {
       <StatusBar style="dark" backgroundColor={COLORS.background} />
 
       {/* 1. Header Bar */}
-      <View style={styles.headerBar}>
-        <View style={styles.logoContainer}>
-          <FontAwesome5 name="shopping-basket" size={16} color={COLORS.primary} />
-          <Text style={styles.logoText}>JoSync</Text>
-        </View>
-        <View style={styles.avatarContainer}>
-          <Ionicons name="person" size={17} color="#FFFFFF" />
-        </View>
-      </View>
+      <HeaderBar onBack={() => navigation.goBack()} />
 
       <ScrollView
         style={styles.scrollView}
@@ -112,13 +107,6 @@ export default function LedgerScreen({ navigation }: any) {
         {/* Subheader Title */}
         <View style={styles.subheader}>
           <View style={styles.subheaderLeft}>
-            <TouchableOpacity
-              onPress={() => navigation.goBack()}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              style={styles.backButton}
-            >
-              <Ionicons name="arrow-back" size={24} color={COLORS.text} />
-            </TouchableOpacity>
             <Text style={styles.subheaderTitle}>Talaan</Text>
           </View>
           <TouchableOpacity style={styles.historyBtn} onPress={handleViewAllActivity}>
@@ -192,12 +180,20 @@ export default function LedgerScreen({ navigation }: any) {
               {filteredBorrowers.map((borrower) => {
                 let statusBg = '#FDF0DC';
                 let statusText = '#C87619';
-                let statusLabel = 'Hindi Pa Bayad';
+                let statusLabel = 'Bahagyang Bayad';
 
-                if (borrower.status === 'PAID') {
+                if (borrower.status === 'NEW') {
+                  statusBg = '#EAEFFD';
+                  statusText = '#3F51B5';
+                  statusLabel = 'Bagong Borrower';
+                } else if (borrower.status === 'PAID') {
                   statusBg = '#E2F7E6';
                   statusText = '#2D8A4E';
                   statusLabel = 'Bayad na';
+                } else if (borrower.status === 'UNPAID') {
+                  statusBg = '#FCE4E4';
+                  statusText = '#D32F2F';
+                  statusLabel = 'Hindi Pa Bayad';
                 }
 
                 return (
@@ -242,7 +238,7 @@ export default function LedgerScreen({ navigation }: any) {
                       <Text
                         style={[
                           styles.balanceText,
-                          borrower.status === 'HAS BALANCE' ? styles.balanceTextUnpaid : {},
+                          borrower.status !== 'PAID' ? styles.balanceTextUnpaid : {},
                         ]}
                       >
                         ₱{borrower.currentBalance.toFixed(2)}
@@ -265,12 +261,12 @@ export default function LedgerScreen({ navigation }: any) {
         </View>
 
         {/* Padding so FAB does not cover list */}
-        <View style={{ height: 100 }} />
+        <View style={{ height: bottomBarHeight + 36 }} />
       </ScrollView>
 
       {/* 6. Floating Action Button */}
       <TouchableOpacity
-        style={styles.fab}
+        style={[styles.fab, { bottom: bottomBarHeight + 16 }]}
         activeOpacity={0.85}
         onPress={handleAddBorrower}
       >
@@ -292,32 +288,7 @@ const styles = StyleSheet.create({
   },
 
   // ── Header Bar ──
-  headerBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    backgroundColor: COLORS.background,
-  },
-  logoContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.xs,
-  },
-  logoText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORS.primary,
-  },
-  avatarContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+
 
   // ── Scroll Content ──
   scrollView: {

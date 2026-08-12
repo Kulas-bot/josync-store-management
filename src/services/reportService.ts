@@ -120,10 +120,10 @@ export const reportService = {
     let totalOwedAmount = 0;
 
     for (const item of ledger) {
-      if (item.status === 'HAS BALANCE') {
+      if (item.currentBalance > 0) {
         borrowersWithBalance++;
         totalOwedAmount += item.currentBalance;
-      } else {
+      } else if (item.status === 'PAID') {
         borrowersPaid++;
       }
     }

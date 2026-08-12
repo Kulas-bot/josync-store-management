@@ -2,6 +2,12 @@ import React from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Platform } from 'react-native';
 import { MaterialCommunityIcons, Ionicons, Feather } from '@expo/vector-icons';
 import { COLORS, ROUNDS } from '../theme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+export function useBottomBarHeight() {
+  const insets = useSafeAreaInsets();
+  return 68 + insets.bottom;
+}
 
 interface BottomTabBarProps {
   activeTab: 'Home' | 'Inventory' | 'List' | 'Ledger' | 'Reports';
@@ -9,6 +15,9 @@ interface BottomTabBarProps {
 }
 
 export default function BottomTabBar({ activeTab, navigation }: BottomTabBarProps) {
+  const insets = useSafeAreaInsets();
+  const bottomPadding = insets.bottom;
+  const barHeight = 68 + bottomPadding;
   const tabs = [
     {
       key: 'Home',
@@ -53,7 +62,7 @@ export default function BottomTabBar({ activeTab, navigation }: BottomTabBarProp
   ];
 
   return (
-    <View style={styles.bottomTabBar}>
+    <View style={[styles.bottomTabBar, { height: barHeight, paddingBottom: bottomPadding }]}>
       {tabs.map((tab) => {
         const isActive = activeTab === tab.key;
         const IconComponent =

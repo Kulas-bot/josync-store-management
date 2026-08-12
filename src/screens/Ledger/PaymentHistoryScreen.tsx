@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Platform,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,11 +19,27 @@ import {
 } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
+import HeaderBar from '../../components/HeaderBar';
 import { COLORS, SPACING, ROUNDS } from '../../theme';
 import { RootStackParamList } from '../../navigation/AppNavigator';
 import { borrowerService, BorrowerSummary } from '../../services/borrowerService';
 import { paymentService } from '../../services/paymentService';
 import { Payment } from '../../types/db';
+
+const FILIPINO_MONTHS = [
+  { value: 0, label: 'Enero' },
+  { value: 1, label: 'Pebrero' },
+  { value: 2, label: 'Marso' },
+  { value: 3, label: 'Abril' },
+  { value: 4, label: 'Mayo' },
+  { value: 5, label: 'Hunyo' },
+  { value: 6, label: 'Hulyo' },
+  { value: 7, label: 'Agosto' },
+  { value: 8, label: 'Setyembre' },
+  { value: 9, label: 'Oktubre' },
+  { value: 10, label: 'Nobyembre' },
+  { value: 11, label: 'Disyembre' },
+];
 
 // ─── Types & Configuration ───────────────────────────────────────────────────
 
@@ -34,6 +51,11 @@ export default function PaymentHistoryScreen({ route, navigation }: Props) {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [summary, setSummary] = useState<BorrowerSummary | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [showMonthModal, setShowMonthModal] = useState(false);
+  const [showYearModal, setShowYearModal] = useState(false);
 
   const loadData = async () => {
     try {
@@ -62,20 +84,29 @@ export default function PaymentHistoryScreen({ route, navigation }: Props) {
     navigation.navigate('RecordPayment', { borrowerId, borrowerName });
   };
 
+  const getAvailableYears = () => {
+    const yearsSet = new Set<number>();
+    yearsSet.add(new Date().getFullYear());
+    payments.forEach((p) => {
+      const year = new Date(p.payment_date).getFullYear();
+      if (!isNaN(year)) {
+        yearsSet.add(year);
+      }
+    });
+    return Array.from(yearsSet).sort((a, b) => b - a);
+  };
+
+  const filteredPayments = payments.filter((p) => {
+    const d = new Date(p.payment_date);
+    return d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
+  });
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <StatusBar style="dark" backgroundColor={COLORS.background} />
 
       {/* 1. Header Bar */}
-      <View style={styles.headerBar}>
-        <View style={styles.logoContainer}>
-          <FontAwesome5 name="shopping-basket" size={16} color={COLORS.primary} />
-          <Text style={styles.logoText}>JoSync</Text>
-        </View>
-        <View style={styles.avatarContainer}>
-          <Ionicons name="person" size={17} color="#FFFFFF" />
-        </View>
-      </View>
+      <HeaderBar onBack={() => navigation.goBack()} />
 
       <ScrollView
         style={styles.scrollView}
@@ -84,13 +115,6 @@ export default function PaymentHistoryScreen({ route, navigation }: Props) {
       >
         {/* Subheader */}
         <View style={styles.subheader}>
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            style={styles.backButton}
-          >
-            <Ionicons name="arrow-back" size={24} color={COLORS.text} />
-          </TouchableOpacity>
           <Text style={styles.subheaderTitle}>Kasaysayan ng Bayad</Text>
         </View>
 
@@ -116,7 +140,7 @@ export default function PaymentHistoryScreen({ route, navigation }: Props) {
               </View>
 
               <View style={styles.remainingContainer}>
-                <Text style={styles.cardTopLabel}>NATITIRANG BAYAD</Text>
+                <Text style={styles.cardTopLabel}>NATITIRANG BALANSE</Text>
                 <Text style={styles.remainingBalanceValue}>₱{(summary?.currentBalance || 0).toFixed(2)}</Text>
               </View>
 
@@ -154,12 +178,20 @@ export default function PaymentHistoryScreen({ route, navigation }: Props) {
         <View style={styles.filterRow}>
           <Text style={styles.timelineTitle}>Talaan ng Bayad</Text>
           <View style={styles.filterPills}>
-            <TouchableOpacity style={styles.filterPill}>
-              <Text style={styles.filterPillText}>Buwan</Text>
+            <TouchableOpacity
+              style={styles.filterPill}
+              onPress={() => setShowMonthModal(true)}
+            >
+              <Text style={styles.filterPillText}>
+                {FILIPINO_MONTHS.find((m) => m.value === selectedMonth)?.label || 'Buwan'}
+              </Text>
               <Feather name="chevron-down" size={12} color={COLORS.textMuted} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.filterPill}>
-              <Text style={styles.filterPillText}>Taon</Text>
+            <TouchableOpacity
+              style={styles.filterPill}
+              onPress={() => setShowYearModal(true)}
+            >
+              <Text style={styles.filterPillText}>{selectedYear}</Text>
               <Feather name="chevron-down" size={12} color={COLORS.textMuted} />
             </TouchableOpacity>
           </View>
@@ -172,8 +204,13 @@ export default function PaymentHistoryScreen({ route, navigation }: Props) {
 
           {loading ? (
             <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 20 }} />
+          ) : filteredPayments.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <MaterialCommunityIcons name="calendar-blank" size={48} color={COLORS.textMuted} />
+              <Text style={styles.emptyText}>Walang naitalang bayad para sa buwang ito.</Text>
+            </View>
           ) : (
-            payments.map((record, index) => {
+            filteredPayments.map((record, index) => {
               const isFirst = index === 0;
 
               return (
@@ -260,6 +297,80 @@ export default function PaymentHistoryScreen({ route, navigation }: Props) {
         </TouchableOpacity>
       </View>
 
+      {/* Month Picker Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={showMonthModal}
+        onRequestClose={() => setShowMonthModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Pumili ng Buwan</Text>
+            <ScrollView style={styles.modalScroll}>
+              {FILIPINO_MONTHS.map((month) => (
+                <TouchableOpacity
+                  key={month.value}
+                  style={styles.modalOptionRow}
+                  onPress={() => {
+                    setSelectedMonth(month.value);
+                    setShowMonthModal(false);
+                  }}
+                >
+                  <Text style={selectedMonth === month.value ? styles.modalOptionTextActive : styles.modalOptionText}>
+                    {month.label}
+                  </Text>
+                  {selectedMonth === month.value && <Feather name="check" size={16} color={COLORS.primary} />}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity
+              style={styles.modalCloseBtn}
+              onPress={() => setShowMonthModal(false)}
+            >
+              <Text style={styles.modalCloseBtnText}>Kanselahin</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Year Picker Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={showYearModal}
+        onRequestClose={() => setShowYearModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Pumili ng Taon</Text>
+            <ScrollView style={styles.modalScroll}>
+              {getAvailableYears().map((year) => (
+                <TouchableOpacity
+                  key={year}
+                  style={styles.modalOptionRow}
+                  onPress={() => {
+                    setSelectedYear(year);
+                    setShowYearModal(false);
+                  }}
+                >
+                  <Text style={selectedYear === year ? styles.modalOptionTextActive : styles.modalOptionText}>
+                    {year}
+                  </Text>
+                  {selectedYear === year && <Feather name="check" size={16} color={COLORS.primary} />}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity
+              style={styles.modalCloseBtn}
+              onPress={() => setShowYearModal(false)}
+            >
+              <Text style={styles.modalCloseBtnText}>Kanselahin</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
 
     </SafeAreaView>
   );
@@ -273,33 +384,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
 
-  // ── Header Bar ──
-  headerBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    backgroundColor: COLORS.background,
-  },
-  logoContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.xs,
-  },
-  logoText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORS.primary,
-  },
-  avatarContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+
 
   // ── Scroll Content ──
   scrollView: {
@@ -646,5 +731,70 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: COLORS.textMuted,
     marginTop: 2,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+    gap: SPACING.md,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: COLORS.textMuted,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.lg,
+  },
+  modalContent: {
+    backgroundColor: COLORS.surface,
+    borderRadius: ROUNDS.md,
+    padding: SPACING.lg,
+    width: '100%',
+    maxWidth: 320,
+    maxHeight: 450,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    marginBottom: SPACING.md,
+    textAlign: 'center',
+  },
+  modalScroll: {
+    maxHeight: 300,
+  },
+  modalOptionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  modalOptionText: {
+    fontSize: 14,
+    color: COLORS.text,
+  },
+  modalOptionTextActive: {
+    fontWeight: 'bold',
+    color: COLORS.primary,
+  },
+  modalCloseBtn: {
+    alignItems: 'center',
+    paddingVertical: 12,
+    marginTop: SPACING.sm,
+  },
+  modalCloseBtnText: {
+    color: COLORS.primary,
+    fontSize: 14,
+    fontWeight: 'bold',
   },
 });

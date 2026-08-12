@@ -12,6 +12,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { COLORS, SPACING, ROUNDS } from '../../theme';
 import { RootStackParamList } from '../../navigation/AppNavigator';
 import BottomTabBar from '../../components/BottomTabBar';
+import HeaderBar from '../../components/HeaderBar';
 import { useFocusEffect } from '@react-navigation/native';
 import { dashboardService } from '../../services';
 
@@ -50,15 +51,7 @@ export default function DashboardScreen({ navigation }: Props) {
       <StatusBar style="dark" backgroundColor={COLORS.background} />
 
       {/* 1. Header Bar */}
-      <View style={styles.headerBar}>
-        <View style={styles.logoContainer}>
-          <FontAwesome5 name="shopping-basket" size={18} color={COLORS.primary} />
-          <Text style={styles.logoText}>JoSync</Text>
-        </View>
-        <View style={styles.avatarContainer}>
-          <Ionicons name="person" size={18} color="#FFFFFF" />
-        </View>
-      </View>
+      <HeaderBar showBack={false} />
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
@@ -157,7 +150,7 @@ export default function DashboardScreen({ navigation }: Props) {
 
           <View style={styles.overviewContent}>
             <Text style={styles.overviewSectionTitle}>ULAT NG TINDAHAN</Text>
-            <Text style={styles.overviewLabel}>Benta Ngayon</Text>
+            <Text style={styles.overviewLabel}>Benta Ngayong Araw</Text>
             {loading ? (
               <ActivityIndicator size="small" color={COLORS.primary} style={{ alignSelf: 'flex-start' }} />
             ) : (
@@ -192,38 +185,7 @@ const styles = StyleSheet.create({
     paddingBottom: 90, // ensure no overlap with floating mock tabbar
   },
 
-  // Header styles
-  headerBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.sm,
-    backgroundColor: COLORS.background,
-  },
-  logoContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.xs,
-  },
-  logoText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: COLORS.primary,
-  },
-  headerTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.textMuted,
-  },
-  avatarContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+
 
   // Greeting styles
   greetingSection: {

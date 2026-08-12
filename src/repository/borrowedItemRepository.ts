@@ -10,7 +10,8 @@ export const borrowedItemRepository = {
     amount: number,
     productId?: string | null,
     notes?: string | null,
-    borrowedAt?: string
+    borrowedAt?: string,
+    quantity: number = 1
   ): Promise<BorrowedItem> {
     const db = getDatabase();
     const id = generateUUID();
@@ -19,8 +20,8 @@ export const borrowedItemRepository = {
 
     await db.runAsync(
       `INSERT INTO borrowed_items (
-        id, borrower_id, product_id, item_type, item_name, amount, notes, borrowed_at, created_at, updated_at, deleted_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL);`,
+        id, borrower_id, product_id, item_type, item_name, amount, notes, borrowed_at, created_at, updated_at, deleted_at, quantity
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?);`,
       [
         id,
         borrowerId,
@@ -31,7 +32,8 @@ export const borrowedItemRepository = {
         notes ?? null,
         finalBorrowedAt,
         now,
-        now
+        now,
+        quantity
       ]
     );
 

@@ -19,6 +19,7 @@ import {
   Feather,
 } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import HeaderBar from '../../components/HeaderBar';
 import { useFocusEffect } from '@react-navigation/native';
 import { COLORS, SPACING, ROUNDS } from '../../theme';
 import { RootStackParamList } from '../../navigation/AppNavigator';
@@ -45,6 +46,8 @@ export default function AddBorrowedItemScreen({ route, navigation }: Props) {
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [amount, setAmount] = useState('');
+  const [quantity, setQuantity] = useState('1');
+  const [unitPrice, setUnitPrice] = useState('');
   const [notes, setNotes] = useState('');
 
   // Dropdown dropdown states (simulation)
@@ -78,10 +81,12 @@ export default function AddBorrowedItemScreen({ route, navigation }: Props) {
       setProducts(prods);
       if (prods.length > 0) {
         setSelectedProduct(prods[0]);
-        setAmount('');
+        setUnitPrice('');
+        setQuantity('1');
       } else {
         setSelectedProduct(null);
-        setAmount('');
+        setUnitPrice('');
+        setQuantity('1');
       }
     } catch (err) {
       console.log(err);
@@ -91,23 +96,46 @@ export default function AddBorrowedItemScreen({ route, navigation }: Props) {
   const handleProductSelect = (prod: Product) => {
     setSelectedProduct(prod);
     setShowProductDropdown(false);
-    setAmount('');
+    setUnitPrice('');
+    setQuantity('1');
   };
 
   const handleSave = async () => {
-    const parsedAmount = parseFloat(amount);
-    if (isNaN(parsedAmount) || parsedAmount <= 0) {
-      Alert.alert('Error', 'Please enter a valid amount greater than 0.');
-      return;
+    let finalAmount = 0;
+    let parsedQuantity = 1;
+
+    if (borrowType === 'PRODUCT') {
+      parsedQuantity = parseInt(quantity, 10);
+      const parsedUnitPrice = parseFloat(unitPrice);
+
+      if (isNaN(parsedQuantity) || parsedQuantity < 1) {
+        Alert.alert('Error', 'Dami must be a positive whole number starting from 1.');
+        return;
+      }
+      if (isNaN(parsedUnitPrice) || parsedUnitPrice <= 0) {
+        Alert.alert('Error', 'Please enter a valid price greater than 0.');
+        return;
+      }
+
+      finalAmount = parsedQuantity * parsedUnitPrice;
+    } else {
+      const parsedAmount = parseFloat(amount);
+      if (isNaN(parsedAmount) || parsedAmount <= 0) {
+        Alert.alert('Error', 'Please enter a valid amount greater than 0.');
+        return;
+      }
+      finalAmount = parsedAmount;
     }
 
     try {
       await borrowerService.createBorrowedItem(
         borrowerId,
         borrowType === 'PRODUCT' ? 'product' : 'cash',
-        parsedAmount,
+        finalAmount,
         borrowType === 'PRODUCT' ? selectedProduct?.id : undefined,
-        notes || undefined
+        notes || undefined,
+        undefined,
+        parsedQuantity
       );
       navigation.goBack();
     } catch (error: any) {
@@ -124,15 +152,7 @@ export default function AddBorrowedItemScreen({ route, navigation }: Props) {
       <StatusBar style="dark" backgroundColor={COLORS.background} />
 
       {/* 1. Header Bar */}
-      <View style={styles.headerBar}>
-        <View style={styles.logoContainer}>
-          <FontAwesome5 name="shopping-basket" size={16} color={COLORS.primary} />
-          <Text style={styles.logoText}>JoSync</Text>
-        </View>
-        <View style={styles.avatarContainer}>
-          <Ionicons name="person" size={17} color="#FFFFFF" />
-        </View>
-      </View>
+      <HeaderBar onBack={() => navigation.goBack()} />
 
       <ScrollView
         style={styles.scrollView}
@@ -142,13 +162,6 @@ export default function AddBorrowedItemScreen({ route, navigation }: Props) {
       >
         {/* Subheader */}
         <View style={styles.subheader}>
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            style={styles.backButton}
-          >
-            <Ionicons name="arrow-back" size={24} color={COLORS.text} />
-          </TouchableOpacity>
           <View style={styles.subheaderTextContainer}>
             <Text style={styles.subheaderTitle}>Magdagdag ng Hiniram</Text>
             <Text style={styles.subheaderSubtitle}>I-update ang talaan ng utang</Text>
@@ -162,7 +175,7 @@ export default function AddBorrowedItemScreen({ route, navigation }: Props) {
               <Ionicons name="person-outline" size={22} color="#FFFFFF" />
             </View>
             <View>
-              <Text style={styles.borrowerName}>{borrowerName || 'Maria Santos'}</Text>
+              <Text style={styles.borrowerName}>{borrowerName}</Text>
               <View style={styles.statusBadge}>
                 <View style={styles.statusDot} />
                 <Text style={styles.statusBadgeText}>Bahagyang Bayad</Text>
@@ -305,25 +318,71 @@ export default function AddBorrowedItemScreen({ route, navigation }: Props) {
             </View>
           ) : null}
 
-          {/* Amount to Borrow Field */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.fieldLabel}>Halaga ng Utang</Text>
-            <View style={styles.currencyInputRow}>
-              <Text style={styles.currencySymbol}>₱</Text>
-              <TextInput
-                style={styles.currencyInput}
-                keyboardType="numeric"
-                placeholder="0.00"
-                placeholderTextColor="#CCCCCC"
-                value={amount}
-                onChangeText={(text) => {
-                  const formatted = text.replace(/[^0-9.]/g, '');
-                  setAmount(formatted);
-                }}
-              />
+          {borrowType === 'PRODUCT' ? (
+            <>
+              {/* Quantity */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.fieldLabel}>Dami</Text>
+                <TextInput
+                  style={styles.textInput}
+                  keyboardType="number-pad"
+                  value={quantity}
+                  onChangeText={(text) => {
+                    const cleaned = text.replace(/[^0-9]/g, '');
+                    setQuantity(cleaned);
+                  }}
+                />
+              </View>
+
+              {/* Unit Price */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.fieldLabel}>Presyo bawat isa</Text>
+                <View style={styles.currencyInputRow}>
+                  <Text style={styles.currencySymbol}>₱</Text>
+                  <TextInput
+                    style={styles.currencyInput}
+                    keyboardType="numeric"
+                    placeholder="0.00"
+                    placeholderTextColor="#CCCCCC"
+                    value={unitPrice}
+                    onChangeText={(text) => {
+                      const formatted = text.replace(/[^0-9.]/g, '');
+                      setUnitPrice(formatted);
+                    }}
+                  />
+                </View>
+                <View style={styles.divider} />
+              </View>
+
+              {/* Calculated Total */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.fieldLabel}>Kabuuan</Text>
+                <Text style={styles.totalValueText}>
+                  ₱{((parseInt(quantity, 10) || 0) * (parseFloat(unitPrice) || 0)).toFixed(2)}
+                </Text>
+              </View>
+            </>
+          ) : (
+            /* Amount to Borrow Field */
+            <View style={styles.inputGroup}>
+              <Text style={styles.fieldLabel}>Halaga ng Utang</Text>
+              <View style={styles.currencyInputRow}>
+                <Text style={styles.currencySymbol}>₱</Text>
+                <TextInput
+                  style={styles.currencyInput}
+                  keyboardType="numeric"
+                  placeholder="0.00"
+                  placeholderTextColor="#CCCCCC"
+                  value={amount}
+                  onChangeText={(text) => {
+                    const formatted = text.replace(/[^0-9.]/g, '');
+                    setAmount(formatted);
+                  }}
+                />
+              </View>
+              <View style={styles.divider} />
             </View>
-            <View style={styles.divider} />
-          </View>
+          )}
 
           {/* Notes (Optional) Field */}
           <View style={styles.inputGroup}>
@@ -384,33 +443,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
 
-  // ── Header Bar ──
-  headerBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    backgroundColor: COLORS.background,
-  },
-  logoContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.xs,
-  },
-  logoText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORS.primary,
-  },
-  avatarContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+
 
   // ── Scroll Content ──
   scrollView: {
@@ -680,6 +713,22 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontSize: 14,
     fontWeight: 'bold',
+  },
+  textInput: {
+    backgroundColor: COLORS.background,
+    borderColor: '#D1CAC2',
+    borderWidth: 1.5,
+    borderRadius: ROUNDS.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: Platform.OS === 'ios' ? 14 : 10,
+    fontSize: 13,
+    color: COLORS.text,
+  },
+  totalValueText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    marginVertical: 4,
   },
 
 });
