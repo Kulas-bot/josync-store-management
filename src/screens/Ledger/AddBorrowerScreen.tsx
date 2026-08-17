@@ -40,10 +40,21 @@ export default function AddBorrowerScreen({ navigation }: Props) {
   const [createdBorrower, setCreatedBorrower] = useState<Borrower | null>(null);
   const [showChoiceModal, setShowChoiceModal] = useState(false);
 
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+
   const handleSave = async () => {
+    if (!customerName.trim()) {
+      Alert.alert('Error', 'Required ang Customer Name.');
+      return;
+    }
+    setShowConfirmModal(true);
+  };
+
+  const handleConfirmSave = async () => {
+    setShowConfirmModal(false);
     try {
       const borrower = await borrowerService.createBorrower(
-        customerName,
+        customerName.trim(),
         contactNumber || undefined,
         address || undefined,
         notes || undefined
@@ -235,6 +246,48 @@ export default function AddBorrowerScreen({ navigation }: Props) {
                 }}
               >
                 <Text style={styles.modalBtnSecondaryText}>Mamaya Na</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Save Confirmation Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={showConfirmModal}
+        onRequestClose={() => setShowConfirmModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>I-save ang borrower?</Text>
+            <View style={styles.modalInfoContainer}>
+              <View style={styles.modalInfoRow}>
+                <Text style={styles.modalInfoLabel}>Pangalan:</Text>
+                <Text style={styles.modalInfoValue}>{customerName}</Text>
+              </View>
+              {contactNumber ? (
+                <View style={styles.modalInfoRow}>
+                  <Text style={styles.modalInfoLabel}>Numero:</Text>
+                  <Text style={styles.modalInfoValue}>{contactNumber}</Text>
+                </View>
+              ) : null}
+            </View>
+
+            <View style={styles.modalActionsVertical}>
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnPrimary]}
+                onPress={handleConfirmSave}
+              >
+                <Text style={styles.modalBtnPrimaryText}>I-save</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnSecondary]}
+                onPress={() => setShowConfirmModal(false)}
+              >
+                <Text style={styles.modalBtnSecondaryText}>Kanselahin</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -504,5 +557,28 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     fontSize: 13,
     fontWeight: 'bold',
+  },
+  modalInfoContainer: {
+    marginVertical: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: ROUNDS.md,
+    padding: SPACING.md,
+    backgroundColor: COLORS.background,
+  },
+  modalInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+  },
+  modalInfoLabel: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    fontWeight: '500',
+  },
+  modalInfoValue: {
+    fontSize: 13,
+    color: COLORS.text,
+    fontWeight: '700',
   },
 });

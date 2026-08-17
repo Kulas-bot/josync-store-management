@@ -9,6 +9,7 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  Modal,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -100,6 +101,21 @@ export default function AddBorrowedItemScreen({ route, navigation }: Props) {
     setQuantity('1');
   };
 
+  interface BorrowConfirmDetails {
+    borrowerId: string;
+    itemType: 'product' | 'cash';
+    amount: number;
+    productId?: string;
+    notes?: string;
+    borrowedAt?: string;
+    quantity?: number;
+    itemName: string;
+    unitPrice?: number;
+  }
+
+  const [confirmModalVisible, setConfirmModalVisible] = useState(false);
+  const [confirmDetails, setConfirmDetails] = useState<BorrowConfirmDetails | null>(null);
+
   const handleSave = async () => {
     let finalAmount = 0;
     let parsedQuantity = 1;
@@ -127,15 +143,31 @@ export default function AddBorrowedItemScreen({ route, navigation }: Props) {
       finalAmount = parsedAmount;
     }
 
+    setConfirmDetails({
+      borrowerId,
+      itemType: borrowType === 'PRODUCT' ? 'product' : 'cash',
+      amount: finalAmount,
+      productId: borrowType === 'PRODUCT' ? selectedProduct?.id : undefined,
+      notes: notes || undefined,
+      quantity: borrowType === 'PRODUCT' ? parsedQuantity : undefined,
+      itemName: borrowType === 'PRODUCT' ? selectedProduct?.name || '' : 'Cash',
+      unitPrice: borrowType === 'PRODUCT' ? parseFloat(unitPrice) : undefined,
+    });
+    setConfirmModalVisible(true);
+  };
+
+  const handleConfirmSave = async () => {
+    setConfirmModalVisible(false);
+    if (!confirmDetails) return;
     try {
       await borrowerService.createBorrowedItem(
-        borrowerId,
-        borrowType === 'PRODUCT' ? 'product' : 'cash',
-        finalAmount,
-        borrowType === 'PRODUCT' ? selectedProduct?.id : undefined,
-        notes || undefined,
-        undefined,
-        parsedQuantity
+        confirmDetails.borrowerId,
+        confirmDetails.itemType,
+        confirmDetails.amount,
+        confirmDetails.productId,
+        confirmDetails.notes,
+        confirmDetails.borrowedAt,
+        confirmDetails.quantity
       );
       navigation.goBack();
     } catch (error: any) {
@@ -323,15 +355,35 @@ export default function AddBorrowedItemScreen({ route, navigation }: Props) {
               {/* Quantity */}
               <View style={styles.inputGroup}>
                 <Text style={styles.fieldLabel}>Dami</Text>
-                <TextInput
-                  style={styles.textInput}
-                  keyboardType="number-pad"
-                  value={quantity}
-                  onChangeText={(text) => {
-                    const cleaned = text.replace(/[^0-9]/g, '');
-                    setQuantity(cleaned);
-                  }}
-                />
+                <View style={styles.quantityContainer}>
+                  <TouchableOpacity
+                    style={styles.quantityBtn}
+                    onPress={() => {
+                      const current = parseInt(quantity, 10) || 1;
+                      if (current > 1) {
+                        setQuantity((current - 1).toString());
+                      }
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.quantityBtnText}>−</Text>
+                  </TouchableOpacity>
+
+                  <View style={styles.quantityValBox}>
+                    <Text style={styles.quantityValueText}>{quantity || '1'}</Text>
+                  </View>
+
+                  <TouchableOpacity
+                    style={styles.quantityBtn}
+                    onPress={() => {
+                      const current = parseInt(quantity, 10) || 1;
+                      setQuantity((current + 1).toString());
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.quantityBtnText}>+</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
 
               {/* Unit Price */}
@@ -431,6 +483,68 @@ export default function AddBorrowedItemScreen({ route, navigation }: Props) {
 
       {/* 6. Mock Bottom Navigation Bar */}
       <BottomTabBar activeTab="Ledger" navigation={navigation} />
+
+      {/* Save Confirmation Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={confirmModalVisible}
+        onRequestClose={() => setConfirmModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Itala ang hiniram?</Text>
+            
+            {confirmDetails?.itemType === 'product' ? (
+              <View style={styles.modalInfoContainer}>
+                <View style={styles.modalInfoRow}>
+                  <Text style={styles.modalInfoLabel}>Paninda:</Text>
+                  <Text style={styles.modalInfoValue}>{confirmDetails.itemName}</Text>
+                </View>
+                <View style={styles.modalInfoRow}>
+                  <Text style={styles.modalInfoLabel}>Dami:</Text>
+                  <Text style={styles.modalInfoValue}>{confirmDetails.quantity}</Text>
+                </View>
+                <View style={styles.modalInfoRow}>
+                  <Text style={styles.modalInfoLabel}>Presyo bawat isa:</Text>
+                  <Text style={styles.modalInfoValue}>₱{confirmDetails.unitPrice?.toFixed(2)}</Text>
+                </View>
+                <View style={styles.modalInfoRow}>
+                  <Text style={styles.modalInfoLabel}>Kabuuan:</Text>
+                  <Text style={styles.modalInfoValue}>₱{confirmDetails.amount.toFixed(2)}</Text>
+                </View>
+              </View>
+            ) : (
+              <View style={styles.modalInfoContainer}>
+                <View style={styles.modalInfoRow}>
+                  <Text style={styles.modalInfoLabel}>Uri:</Text>
+                  <Text style={styles.modalInfoValue}>Cash</Text>
+                </View>
+                <View style={styles.modalInfoRow}>
+                  <Text style={styles.modalInfoLabel}>Halaga:</Text>
+                  <Text style={styles.modalInfoValue}>₱{confirmDetails?.amount.toFixed(2)}</Text>
+                </View>
+              </View>
+            )}
+
+            <View style={styles.modalActionsVertical}>
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnPrimary]}
+                onPress={handleConfirmSave}
+              >
+                <Text style={styles.modalBtnPrimaryText}>I-save</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnSecondary]}
+                onPress={() => setConfirmModalVisible(false)}
+              >
+                <Text style={styles.modalBtnSecondaryText}>Kanselahin</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -730,5 +844,109 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     marginVertical: 4,
   },
-
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.lg,
+  },
+  modalContent: {
+    backgroundColor: COLORS.surface,
+    borderRadius: ROUNDS.md,
+    padding: SPACING.lg,
+    width: '100%',
+    maxWidth: 320,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    marginBottom: SPACING.xs,
+    textAlign: 'center',
+  },
+  modalActionsVertical: {
+    gap: SPACING.sm,
+  },
+  modalBtn: {
+    width: '100%',
+    paddingVertical: 12,
+    borderRadius: ROUNDS.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalBtnPrimary: {
+    backgroundColor: COLORS.primary,
+  },
+  modalBtnPrimaryText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  modalBtnSecondary: {
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+  },
+  modalBtnSecondaryText: {
+    color: COLORS.textMuted,
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  modalInfoContainer: {
+    marginVertical: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: ROUNDS.md,
+    padding: SPACING.md,
+    backgroundColor: COLORS.background,
+  },
+  modalInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+  },
+  modalInfoLabel: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    fontWeight: '500',
+  },
+  modalInfoValue: {
+    fontSize: 13,
+    color: COLORS.text,
+    fontWeight: '700',
+  },
+  quantityContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  quantityBtn: {
+    width: 48,
+    height: 48,
+    borderWidth: 1.5,
+    borderColor: '#D1CAC2',
+    borderRadius: ROUNDS.md,
+    backgroundColor: COLORS.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quantityBtnText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.text,
+  },
+  quantityValBox: {
+    minWidth: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: SPACING.md,
+  },
+  quantityValueText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: COLORS.text,
+  },
 });

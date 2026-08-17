@@ -46,15 +46,16 @@ interface CategoryRowProps {
   item: Category;
   isEditing: boolean;
   onPress: (item: Category) => void;
+  onEdit: (item: Category) => void;
   onDelete: (item: Category) => void;
 }
 
-function CategoryRow({ item, isEditing, onPress, onDelete }: CategoryRowProps) {
+function CategoryRow({ item, isEditing, onPress, onEdit, onDelete }: CategoryRowProps) {
   return (
     <TouchableOpacity
       style={styles.categoryCard}
       activeOpacity={0.75}
-      onPress={() => isEditing ? onDelete(item) : onPress(item)}
+      onPress={() => isEditing ? undefined : onPress(item)}
     >
       {/* Icon circle */}
       <View style={[styles.categoryIconCircle, { backgroundColor: item.iconBgColor }]}>
@@ -79,8 +80,13 @@ function CategoryRow({ item, isEditing, onPress, onDelete }: CategoryRowProps) {
           </View>
         )}
         {isEditing ? (
-          <View style={styles.deleteIconCircle}>
-            <Feather name="trash-2" size={18} color="#D32F2F" />
+          <View style={{ flexDirection: 'row', gap: SPACING.sm }}>
+            <TouchableOpacity onPress={() => onEdit(item)} style={styles.editIconCircle}>
+              <Feather name="edit-2" size={15} color={COLORS.primary} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => onDelete(item)} style={styles.deleteIconCircle}>
+              <Feather name="trash-2" size={15} color="#D32F2F" />
+            </TouchableOpacity>
           </View>
         ) : (
           <Feather name="chevron-right" size={18} color={COLORS.textMuted} />
@@ -132,7 +138,7 @@ export default function InventoryScreen({ navigation }: Props) {
         } else if (normalized.includes('laruan') || normalized.includes('toy')) {
           iconName = 'robot-happy-outline';
           iconBgColor = '#E6F4EA';
-        } else if (normalized.includes('cupcake') || normalized.includes('tinapay') || normalized.includes('cake')) {
+        } else if (normalized.includes('cupcake') || normalized.includes('cake')) {
           iconName = 'cake-variant-outline';
           iconBgColor = '#FCE8E6';
         }
@@ -182,6 +188,10 @@ export default function InventoryScreen({ navigation }: Props) {
 
   const handleEditCategories = () => {
     setIsEditing(!isEditing);
+  };
+
+  const handleEditCategory = (item: Category) => {
+    navigation.navigate('AddCategory', { editCategoryId: item.id });
   };
 
   const handleDeleteCategory = (item: Category) => {
@@ -294,6 +304,7 @@ export default function InventoryScreen({ navigation }: Props) {
                     item={item} 
                     isEditing={isEditing} 
                     onPress={handleCategoryPress} 
+                    onEdit={handleEditCategory}
                     onDelete={handleDeleteCategory}
                   />
                 ))
@@ -491,6 +502,14 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     color: COLORS.primary,
+  },
+  editIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#E8F0FE',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   deleteIconCircle: {
     width: 32,

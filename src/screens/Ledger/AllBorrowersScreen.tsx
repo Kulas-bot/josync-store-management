@@ -148,11 +148,18 @@ export default function AllBorrowersScreen({ navigation }: Props) {
         keyboardShouldPersistTaps="handled"
       >
         {/* Subheader */}
-        <View style={styles.subheader}>
+        <View style={[styles.subheader, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
           <View style={styles.subheaderTextContainer}>
             <Text style={styles.subheaderTitle}>Lahat ng Nangutang</Text>
             <Text style={styles.subheaderSubtitle}>{(summary?.totalActive || 0)} na Account ng Customer</Text>
           </View>
+          <TouchableOpacity
+            style={styles.archiveHeaderBtn}
+            onPress={() => navigation.navigate('ArchivedBorrowers')}
+          >
+            <MaterialCommunityIcons name="archive-outline" size={20} color={COLORS.primary} />
+            <Text style={styles.archiveHeaderBtnText}>Nakatago</Text>
+          </TouchableOpacity>
         </View>
 
         {/* 2. Search Bar */}
@@ -734,5 +741,19 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontSize: 14,
     fontWeight: 'bold',
+  },
+  archiveHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#F3EFEA',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: ROUNDS.md,
+  },
+  archiveHeaderBtnText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: COLORS.primary,
   },
 });

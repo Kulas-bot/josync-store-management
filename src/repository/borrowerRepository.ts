@@ -24,7 +24,7 @@ export const borrowerRepository = {
   async getBorrowerById(id: string): Promise<Borrower | null> {
     const db = getDatabase();
     const result = await db.getFirstAsync<Borrower>(
-      `SELECT * FROM borrowers WHERE id = ? AND deleted_at IS NULL;`,
+      `SELECT * FROM borrowers WHERE id = ?;`,
       [id]
     );
     return result;
@@ -73,6 +73,26 @@ export const borrowerRepository = {
     );
     if (result.changes === 0) {
       throw new Error(`Failed to delete borrower: Borrower not found or already deleted.`);
+    }
+  },
+
+  async getArchivedBorrowers(): Promise<Borrower[]> {
+    const db = getDatabase();
+    const results = await db.getAllAsync<Borrower>(
+      `SELECT * FROM borrowers WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC;`
+    );
+    return results;
+  },
+
+  async restoreBorrower(id: string): Promise<void> {
+    const db = getDatabase();
+    const now = new Date().toISOString();
+    const result = await db.runAsync(
+      `UPDATE borrowers SET deleted_at = NULL, updated_at = ? WHERE id = ? AND deleted_at IS NOT NULL;`,
+      [now, id]
+    );
+    if (result.changes === 0) {
+      throw new Error(`Failed to restore borrower: Borrower not found or not archived.`);
     }
   }
 };

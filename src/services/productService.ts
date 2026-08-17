@@ -49,7 +49,7 @@ export const productService = {
     return await productRepository.getProductsByCategory(categoryId);
   },
 
-  async updateProduct(id: string, name: string, categoryId: string): Promise<void> {
+  async updateProduct(id: string, name: string, categoryId: string, stockStatus?: 'high' | 'low' | 'out'): Promise<void> {
     const trimmedName = name.trim();
     if (!trimmedName) {
       throw new Error('Product name is required.');
@@ -57,6 +57,13 @@ export const productService = {
 
     if (!categoryId.trim()) {
       throw new Error('Please select a category.');
+    }
+
+    if (stockStatus) {
+      const validStatuses = ['high', 'low', 'out'];
+      if (!validStatuses.includes(stockStatus)) {
+        throw new Error('Invalid stock status.');
+      }
     }
 
     const product = await productRepository.getProductById(id);
@@ -79,7 +86,7 @@ export const productService = {
       throw new Error(`Product "${trimmedName}" already exists in this category.`);
     }
 
-    await productRepository.updateProduct(id, trimmedName, categoryId);
+    await productRepository.updateProduct(id, trimmedName, categoryId, stockStatus);
   },
 
   async updateStockStatus(id: string, stockStatus: 'high' | 'low' | 'out'): Promise<void> {

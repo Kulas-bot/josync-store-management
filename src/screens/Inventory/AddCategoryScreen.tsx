@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -42,16 +42,54 @@ const ICON_OPTIONS: IconOption[] = [
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
-export default function AddCategoryScreen({ navigation }: Props) {
+export default function AddCategoryScreen({ route, navigation }: Props) {
   const insets = useSafeAreaInsets();
   const bottomPadding = insets.bottom;
   const barHeight = 68 + bottomPadding;
   const [categoryName, setCategoryName] = useState('');
   const [selectedIcon, setSelectedIcon] = useState<IconOption>(ICON_OPTIONS[0]);
+  const editCategoryId = route.params?.editCategoryId;
+
+  useEffect(() => {
+    if (editCategoryId) {
+      const loadCategory = async () => {
+        try {
+          const category = await categoryService.getCategoryById(editCategoryId);
+          if (category) {
+            setCategoryName(category.name);
+          }
+        } catch (error) {
+          console.error('Failed to load category:', error);
+        }
+      };
+      loadCategory();
+    }
+  }, [editCategoryId]);
+
+  useEffect(() => {
+    const normalized = categoryName.toLowerCase();
+    let matchedIcon = ICON_OPTIONS[0];
+    if (normalized.includes('school') || normalized.includes('papel') || normalized.includes('sulat')) {
+      matchedIcon = ICON_OPTIONS.find(o => o.iconName === 'pencil') || ICON_OPTIONS[0];
+    } else if (normalized.includes('chip') || normalized.includes('chichirya') || normalized.includes('snack')) {
+      matchedIcon = ICON_OPTIONS.find(o => o.iconName === 'food') || ICON_OPTIONS[0];
+    } else if (normalized.includes('biskwit') || normalized.includes('biscuits') || normalized.includes('tinapay')) {
+      matchedIcon = ICON_OPTIONS.find(o => o.iconName === 'cookie') || ICON_OPTIONS[0];
+    } else if (normalized.includes('laruan') || normalized.includes('toy')) {
+      matchedIcon = ICON_OPTIONS.find(o => o.iconName === 'robot-happy-outline') || ICON_OPTIONS[0];
+    } else if (normalized.includes('cupcake') || normalized.includes('cake')) {
+      matchedIcon = ICON_OPTIONS.find(o => o.iconName === 'cake-variant-outline') || ICON_OPTIONS[0];
+    }
+    setSelectedIcon(matchedIcon);
+  }, [categoryName]);
 
   const handleSave = async () => {
     try {
-      await categoryService.createCategory(categoryName);
+      if (editCategoryId) {
+        await categoryService.updateCategory(editCategoryId, categoryName);
+      } else {
+        await categoryService.createCategory(categoryName);
+      }
       navigation.goBack();
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Hindi ma-save ang kategorya.');
@@ -107,30 +145,32 @@ export default function AddCategoryScreen({ navigation }: Props) {
           </View>
 
           {/* Icon Selector Grid */}
-          <View style={styles.iconGrid}>
-            {ICON_OPTIONS.map((option) => {
-              const isSelected = option.id === selectedIcon.id;
-              return (
-                <TouchableOpacity
-                  key={option.id}
-                  style={[
-                    styles.gridTile,
-                    isSelected ? styles.gridTileSelected : styles.gridTileUnselected,
-                  ]}
-                  onPress={() => setSelectedIcon(option)}
-                  activeOpacity={0.8}
-                >
-                  <View style={styles.iconWrapper}>
-                    <MaterialCommunityIcons
-                      name={option.iconName as any}
-                      size={22}
-                      color={isSelected ? COLORS.primary : COLORS.textMuted}
-                    />
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+          {!editCategoryId && (
+            <View style={styles.iconGrid}>
+              {ICON_OPTIONS.map((option) => {
+                const isSelected = option.id === selectedIcon.id;
+                return (
+                  <TouchableOpacity
+                    key={option.id}
+                    style={[
+                      styles.gridTile,
+                      isSelected ? styles.gridTileSelected : styles.gridTileUnselected,
+                    ]}
+                    onPress={() => setSelectedIcon(option)}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.iconWrapper}>
+                      <MaterialCommunityIcons
+                        name={option.iconName as any}
+                        size={22}
+                        color={isSelected ? COLORS.primary : COLORS.textMuted}
+                      />
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
         </View>
 
         {/* 5. Action Buttons */}

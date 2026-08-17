@@ -47,8 +47,13 @@ export default function BorrowerDetailsScreen({ route, navigation }: Props) {
 
   const [details, setDetails] = useState<BorrowerDetailsState | null>(null);
   const [loading, setLoading] = useState(true);
+  const [restoreModalVisible, setRestoreModalVisible] = useState(false);
+  const [actionsModalVisible, setActionsModalVisible] = useState(false);
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [reminderModalVisible, setReminderModalVisible] = useState(false);
   const [generatedMessage, setGeneratedMessage] = useState('');
+  
+  const isArchived = !!details?.borrower.deleted_at;
 
   const activeBorrowerName = details?.borrower.name || borrowerName;
 
@@ -142,6 +147,43 @@ export default function BorrowerDetailsScreen({ route, navigation }: Props) {
     }
   };
 
+  const handleDeletePress = () => {
+    setActionsModalVisible(false);
+    const balance = details?.currentBalance || 0;
+    if (balance > 0) {
+      Alert.alert(
+        'Hindi maaaring tanggalin ang borrower.',
+        `May natitirang balanse na ₱${balance.toFixed(2)}.`
+      );
+      return;
+    }
+    setDeleteModalVisible(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    setDeleteModalVisible(false);
+    try {
+      await borrowerService.deleteBorrower(borrowerId);
+      navigation.goBack();
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Hindi ma-delete ang borrower.');
+    }
+  };
+
+  const handleRestoreConfirm = async () => {
+    setRestoreModalVisible(false);
+    try {
+      await borrowerService.restoreBorrower(borrowerId);
+      Alert.alert(
+        'Na-restore',
+        `${details?.borrower.name || borrowerName} ay naibalik na sa aktibong listahan.`,
+        [{ text: 'OK', onPress: () => navigation.goBack() }]
+      );
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Hindi ma-restore ang borrower.');
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <StatusBar style="dark" backgroundColor={COLORS.background} />
@@ -155,8 +197,14 @@ export default function BorrowerDetailsScreen({ route, navigation }: Props) {
         showsVerticalScrollIndicator={false}
       >
         {/* Subheader */}
-        <View style={styles.subheader}>
+        <View style={[styles.subheader, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
           <Text style={styles.subheaderTitle}>Detalye ng Nangutang</Text>
+          <TouchableOpacity
+            onPress={() => setActionsModalVisible(true)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Feather name="more-vertical" size={22} color={COLORS.text} />
+          </TouchableOpacity>
         </View>
 
         {/* 2. Borrower Summary Card */}
@@ -183,7 +231,7 @@ export default function BorrowerDetailsScreen({ route, navigation }: Props) {
               )}
 
               <View style={styles.balanceContainer}>
-                <Text style={styles.balanceLabel}>Natitirang Balanse</Text>
+                <Text style={styles.balanceLabel}>{isArchived ? 'Balanse' : 'Natitirang Balanse'}</Text>
                 <Text style={styles.balanceValue}>₱{(details?.currentBalance || 0).toFixed(2)}</Text>
               </View>
             </View>
@@ -225,14 +273,16 @@ export default function BorrowerDetailsScreen({ route, navigation }: Props) {
                 </Text>
               </View>
 
-              <TouchableOpacity
-                style={styles.addNewItemBtn}
-                activeOpacity={0.8}
-                onPress={handleAddNewItem}
-              >
-                <MaterialCommunityIcons name="plus-circle-outline" size={16} color={COLORS.primary} />
-                <Text style={styles.addNewItemBtnText}>Magdagdag ng Hiniram</Text>
-              </TouchableOpacity>
+              {!isArchived && (
+                <TouchableOpacity
+                  style={styles.addNewItemBtn}
+                  activeOpacity={0.8}
+                  onPress={handleAddNewItem}
+                >
+                  <MaterialCommunityIcons name="plus-circle-outline" size={16} color={COLORS.primary} />
+                  <Text style={styles.addNewItemBtnText}>Magdagdag ng Hiniram</Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             {/* 4. Payment Summary Card */}
@@ -265,14 +315,16 @@ export default function BorrowerDetailsScreen({ route, navigation }: Props) {
 
         {/* 5. Action Buttons */}
         <View style={styles.actionsContainer}>
-          <TouchableOpacity
-            style={styles.recordPaymentButton}
-            activeOpacity={0.85}
-            onPress={handleRecordPayment}
-          >
-            <MaterialCommunityIcons name="cash-register" size={18} color="#FFFFFF" />
-            <Text style={styles.recordPaymentButtonText}>Itala ang Bayad</Text>
-          </TouchableOpacity>
+          {!isArchived && (
+            <TouchableOpacity
+              style={styles.recordPaymentButton}
+              activeOpacity={0.85}
+              onPress={handleRecordPayment}
+            >
+              <MaterialCommunityIcons name="cash-register" size={18} color="#FFFFFF" />
+              <Text style={styles.recordPaymentButtonText}>Itala ang Bayad</Text>
+            </TouchableOpacity>
+          )}
 
           <TouchableOpacity
             style={styles.paymentHistoryButton}
@@ -285,7 +337,7 @@ export default function BorrowerDetailsScreen({ route, navigation }: Props) {
         </View>
 
         {/* 6. Smart Reminder Card */}
-        {details && details.currentBalance > 0 && (
+        {!isArchived && details && details.currentBalance > 0 && (
           <View style={styles.reminderCard}>
             <View style={styles.reminderLeft}>
               <View style={styles.reminderIconBadge}>
@@ -342,6 +394,149 @@ export default function BorrowerDetailsScreen({ route, navigation }: Props) {
               <TouchableOpacity
                 style={[styles.modalBtn, styles.modalBtnSecondary]}
                 onPress={() => setReminderModalVisible(false)}
+              >
+                <Text style={styles.modalBtnSecondaryText}>Kanselahin</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Actions Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={actionsModalVisible}
+        onRequestClose={() => setActionsModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>I-manage ang Borrower</Text>
+            <Text style={[styles.modalMessage, { textAlign: 'center', marginBottom: SPACING.md }]}>
+              {details?.borrower.name || borrowerName}
+            </Text>
+            
+            <View style={styles.modalActionsVertical}>
+              {isArchived ? (
+                <TouchableOpacity
+                  style={[styles.modalBtn, styles.modalBtnSecondary, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}
+                  onPress={() => {
+                    setActionsModalVisible(false);
+                    setRestoreModalVisible(true);
+                  }}
+                >
+                  <Feather name="refresh-cw" size={16} color={COLORS.primary} />
+                  <Text style={{ fontWeight: 'bold', color: COLORS.primary }}>Ibalik ang Borrower</Text>
+                </TouchableOpacity>
+              ) : (
+                <>
+                  <TouchableOpacity
+                    style={[styles.modalBtn, styles.modalBtnSecondary, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}
+                    onPress={() => {
+                      setActionsModalVisible(false);
+                      navigation.navigate('AddBorrower' as any);
+                    }}
+                  >
+                    <Feather name="edit-2" size={16} color={COLORS.primary} />
+                    <Text style={{ fontWeight: 'bold', color: COLORS.primary }}>I-edit</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.modalBtn, styles.modalBtnSecondary, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}
+                    onPress={() => {
+                      setActionsModalVisible(false);
+                      handleSendReminder();
+                    }}
+                  >
+                    <Feather name="bell" size={16} color={COLORS.primary} />
+                    <Text style={{ fontWeight: 'bold', color: COLORS.primary }}>Magpadala ng Reminder</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.modalBtn, styles.modalBtnSecondary, { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FCE4E4', borderColor: '#D32F2F' }]}
+                    onPress={handleDeletePress}
+                  >
+                    <Feather name="trash-2" size={16} color="#D32F2F" />
+                    <Text style={{ fontWeight: 'bold', color: '#D32F2F' }}>Tanggalin</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+
+            <TouchableOpacity
+              style={[styles.modalBtn, styles.modalBtnSecondary, { marginTop: SPACING.sm }]}
+              onPress={() => setActionsModalVisible(false)}
+            >
+              <Text style={styles.modalBtnSecondaryText}>Kanselahin</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Restore Confirmation Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={restoreModalVisible}
+        onRequestClose={() => setRestoreModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Ibalik ang borrower?</Text>
+            <Text style={[styles.modalMessage, { textAlign: 'center', fontWeight: 'bold', marginBottom: SPACING.xs }]}>
+              {details?.borrower.name || borrowerName}
+            </Text>
+            <Text style={[styles.modalMessage, { fontSize: 12, lineHeight: 18, marginBottom: SPACING.lg }]}>
+              Ang borrower na ito ay muling lilitaw sa aktibong listahan ng Ledger.
+            </Text>
+            
+            <View style={styles.modalActionsVertical}>
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnPrimary]}
+                onPress={handleRestoreConfirm}
+              >
+                <Text style={styles.modalBtnPrimaryText}>Ibalik</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnSecondary]}
+                onPress={() => setRestoreModalVisible(false)}
+              >
+                <Text style={styles.modalBtnSecondaryText}>Kanselahin</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={deleteModalVisible}
+        onRequestClose={() => setDeleteModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Tanggalin ang borrower?</Text>
+            <Text style={[styles.modalMessage, { textAlign: 'center', fontWeight: 'bold', marginBottom: SPACING.xs }]}>
+              {details?.borrower.name || borrowerName}
+            </Text>
+            <Text style={[styles.modalMessage, { fontSize: 12, lineHeight: 18, marginBottom: SPACING.lg }]}>
+              Hindi na makikita ang borrower na ito sa aktibong listahan. Ang kanyang dating utang at bayad ay mananatili bilang historical records.
+            </Text>
+            
+            <View style={styles.modalActionsVertical}>
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnPrimary, { backgroundColor: '#D32F2F' }]}
+                onPress={handleDeleteConfirm}
+              >
+                <Text style={styles.modalBtnPrimaryText}>Tanggalin</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnSecondary]}
+                onPress={() => setDeleteModalVisible(false)}
               >
                 <Text style={styles.modalBtnSecondaryText}>Kanselahin</Text>
               </TouchableOpacity>
@@ -765,5 +960,11 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     fontSize: 13,
     fontWeight: 'bold',
+  },
+  modalMessage: {
+    fontSize: 14,
+    color: COLORS.text,
+    textAlign: 'center',
+    marginBottom: SPACING.md,
   },
 });

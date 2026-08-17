@@ -328,9 +328,9 @@ export default function RecordPaymentScreen({ route, navigation }: Props) {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Kumpirmahin ang Bayad</Text>
+            <Text style={styles.modalTitle}>I-save ang bayad?</Text>
             <Text style={styles.modalMessage}>
-              Mangyaring suriin ang mga detalye ng bayad bago itala ang transaksyong ito.
+              Mangyaring suriin ang mga detalye ng bayad bago ito i-save.
             </Text>
 
             <View style={styles.modalDetails}>
@@ -380,7 +380,7 @@ export default function RecordPaymentScreen({ route, navigation }: Props) {
                 style={styles.modalConfirmBtn}
                 onPress={handleConfirmPayment}
               >
-                <Text style={styles.modalConfirmText}>Kumpirmahin ang Bayad</Text>
+                <Text style={styles.modalConfirmText}>I-save</Text>
               </TouchableOpacity>
             </View>
           </View>

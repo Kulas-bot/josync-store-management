@@ -56,7 +56,19 @@ export const borrowerService = {
   },
 
   async deleteBorrower(id: string): Promise<void> {
+    const balance = await this.getCurrentBalance(id);
+    if (balance > 0) {
+      throw new Error(`Hindi maaaring tanggalin ang borrower. May natitirang balanse na ₱${balance.toFixed(2)}.`);
+    }
     await borrowerRepository.deleteBorrower(id);
+  },
+
+  async getArchivedBorrowers(): Promise<Borrower[]> {
+    return await borrowerRepository.getArchivedBorrowers();
+  },
+
+  async restoreBorrower(id: string): Promise<void> {
+    await borrowerRepository.restoreBorrower(id);
   },
 
   async searchBorrowers(nameQuery: string): Promise<Borrower[]> {

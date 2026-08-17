@@ -45,12 +45,12 @@ interface ProductUI extends Product {
 
 interface ProductCardProps {
   product: ProductUI;
-  isEditing: boolean;
   onPress: (product: ProductUI) => void;
+  onActionPress: (product: ProductUI) => void;
   onDelete: (product: ProductUI) => void;
 }
 
-function ProductCard({ product, isEditing, onPress, onDelete }: ProductCardProps) {
+function ProductCard({ product, onPress, onActionPress, onDelete }: ProductCardProps) {
   // Styles for stock pills based on status
   let pillBg = '#E2F7E6';
   let pillText = '#2D8A4E';
@@ -73,7 +73,7 @@ function ProductCard({ product, isEditing, onPress, onDelete }: ProductCardProps
     <TouchableOpacity
       style={styles.productCard}
       activeOpacity={0.75}
-      onPress={() => isEditing ? onDelete(product) : onPress(product)}
+      onPress={() => onPress(product)}
     >
       {/* Icon badge left */}
       <View style={styles.productIconBadge}>
@@ -86,20 +86,14 @@ function ProductCard({ product, isEditing, onPress, onDelete }: ProductCardProps
         <View style={[styles.statusDot, { backgroundColor: statusDotColor }]} />
       </View>
 
-      {/* Right container: Status pill + right chevron arrow OR delete bin icon */}
+      {/* Right container: Status pill + right three-dot menu button */}
       <View style={styles.productRight}>
-        {isEditing ? (
-          <View style={styles.deleteIconCircle}>
-            <Feather name="trash-2" size={18} color="#D32F2F" />
-          </View>
-        ) : (
-          <>
-            <View style={[styles.statusPill, { backgroundColor: pillBg }]}>
-              <Text style={[styles.statusPillText, { color: pillText }]}>{labelText}</Text>
-            </View>
-            <Feather name="chevron-right" size={18} color={COLORS.textMuted} />
-          </>
-        )}
+        <View style={[styles.statusPill, { backgroundColor: pillBg }]}>
+          <Text style={[styles.statusPillText, { color: pillText }]}>{labelText}</Text>
+        </View>
+        <TouchableOpacity onPress={() => onActionPress(product)} style={{ padding: 6 }}>
+          <Feather name="more-vertical" size={18} color={COLORS.textMuted} />
+        </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
@@ -115,10 +109,9 @@ export default function CategoryProductsScreen({ route, navigation }: Props) {
 
   const [activeFilter, setActiveFilter] = useState<'ALL' | 'LOW' | 'OUT'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
-  const [isEditing, setIsEditing] = useState(false);
-  
   const [selectedProduct, setSelectedProduct] = useState<ProductUI | null>(null);
   const [statusModalVisible, setStatusModalVisible] = useState(false);
+  const [actionModalVisible, setActionModalVisible] = useState(false);
   const [promptModalVisible, setPromptModalVisible] = useState(false);
   
   const [products, setProducts] = useState<ProductUI[]>([]);
@@ -161,6 +154,7 @@ export default function CategoryProductsScreen({ route, navigation }: Props) {
   });
 
   const lowStockCount = products.filter((p) => p.stock_status === 'low').length;
+  const outStockCount = products.filter((p) => p.stock_status === 'out').length;
 
   const handleProductPress = (product: ProductUI) => {
     setSelectedProduct(product);
@@ -206,8 +200,9 @@ export default function CategoryProductsScreen({ route, navigation }: Props) {
     navigation.navigate('AddProduct', { categoryId, categoryName });
   };
 
-  const handleMoreOptions = () => {
-    setIsEditing(!isEditing);
+  const handleActionPress = (product: ProductUI) => {
+    setSelectedProduct(product);
+    setActionModalVisible(true);
   };
 
   const handleDeleteProduct = (product: ProductUI) => {
@@ -239,7 +234,7 @@ export default function CategoryProductsScreen({ route, navigation }: Props) {
       <StatusBar style="dark" backgroundColor={COLORS.background} />
 
       {/* 1. Header Bar */}
-      <HeaderBar onBack={() => navigation.goBack()} />
+      <HeaderBar onBack={() => navigation.goBack()} showProfile={false} />
 
       {/* 2. Category Header & Actions */}
       <View style={styles.categoryHeader}>
@@ -250,14 +245,7 @@ export default function CategoryProductsScreen({ route, navigation }: Props) {
           </View>
         </View>
 
-        <View style={styles.categoryHeaderRight}>
-          <TouchableOpacity 
-            style={[styles.actionIconBtn, isEditing && { backgroundColor: '#FDE8E8' }]} 
-            onPress={handleMoreOptions}
-          >
-            <Feather name="more-vertical" size={20} color={isEditing ? COLORS.primary : COLORS.text} />
-          </TouchableOpacity>
-        </View>
+        <View style={styles.categoryHeaderRight} />
       </View>
 
       {/* 3. Search Bar */}
@@ -366,6 +354,21 @@ export default function CategoryProductsScreen({ route, navigation }: Props) {
             >
               Ubos
             </Text>
+            <View
+              style={[
+                styles.pillBadge,
+                activeFilter === 'OUT' ? styles.pillBadgeActive : styles.pillBadgeInactive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.pillBadgeText,
+                  activeFilter === 'OUT' ? styles.pillBadgeTextActive : styles.pillBadgeTextInactive,
+                ]}
+              >
+                {outStockCount}
+              </Text>
+            </View>
           </TouchableOpacity>
         </ScrollView>
       </View>
@@ -382,8 +385,8 @@ export default function CategoryProductsScreen({ route, navigation }: Props) {
           renderItem={({ item }) => (
             <ProductCard 
               product={item} 
-              isEditing={isEditing} 
               onPress={handleProductPress} 
+              onActionPress={handleActionPress}
               onDelete={handleDeleteProduct} 
             />
           )}
@@ -503,6 +506,54 @@ export default function CategoryProductsScreen({ route, navigation }: Props) {
             <TouchableOpacity
               style={styles.modalCancelBtn}
               onPress={() => setStatusModalVisible(false)}
+            >
+              <Text style={styles.modalCancelBtnText}>Kanselahin</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Product Action Menu Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={actionModalVisible}
+        onRequestClose={() => setActionModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>I-manage ang Paninda</Text>
+            <Text style={styles.modalSubTitle}>{selectedProduct?.name}</Text>
+            
+            <View style={styles.statusOptionsContainer}>
+              <TouchableOpacity
+                style={[styles.statusOptionBtn, { backgroundColor: '#E8F0FE', borderColor: COLORS.primary }]}
+                onPress={() => {
+                  setActionModalVisible(false);
+                  if (selectedProduct) {
+                    navigation.navigate('AddProduct', { categoryId, categoryName, editProductId: selectedProduct.id });
+                  }
+                }}
+              >
+                <Feather name="edit-2" size={16} color={COLORS.primary} style={{ marginRight: 8 }} />
+                <Text style={[styles.statusOptionText, { color: COLORS.primary }]}>I-edit</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.statusOptionBtn, { backgroundColor: '#FCE4E4', borderColor: '#D32F2F' }]}
+                onPress={() => {
+                  setActionModalVisible(false);
+                  if (selectedProduct) handleDeleteProduct(selectedProduct);
+                }}
+              >
+                <Feather name="trash-2" size={16} color="#D32F2F" style={{ marginRight: 8 }} />
+                <Text style={[styles.statusOptionText, { color: '#D32F2F' }]}>Tanggalin</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={styles.modalCancelBtn}
+              onPress={() => setActionModalVisible(false)}
             >
               <Text style={styles.modalCancelBtnText}>Kanselahin</Text>
             </TouchableOpacity>
@@ -736,6 +787,14 @@ const styles = StyleSheet.create({
     height: 32,
     borderRadius: 16,
     backgroundColor: '#FDE8E8',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#E8F0FE',
     alignItems: 'center',
     justifyContent: 'center',
   },
