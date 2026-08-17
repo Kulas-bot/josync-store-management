@@ -18,14 +18,15 @@ import AllBorrowersScreen from '../screens/Ledger/AllBorrowersScreen';
 import AddBorrowerScreen from '../screens/Ledger/AddBorrowerScreen';
 import SplashScreen from '../screens/Splash/SplashScreen';
 import SalesHistoryScreen from '../screens/Sales/SalesHistoryScreen';
+import ArchivedBorrowersScreen from '../screens/Ledger/ArchivedBorrowersScreen';
 
 export type RootStackParamList = {
   Splash: undefined;
   Dashboard: undefined;
   Inventory: undefined;
   CategoryProducts: { categoryId: string; categoryName: string };
-  AddCategory: undefined;
-  AddProduct: { categoryId: string; categoryName: string };
+  AddCategory: { editCategoryId?: string } | undefined;
+  AddProduct: { categoryId: string; categoryName: string; editProductId?: string };
   ShoppingList: undefined;
   DailySales: undefined;
   SalesHistory: undefined;
@@ -37,6 +38,7 @@ export type RootStackParamList = {
   Reports: undefined;
   AllBorrowers: undefined;
   AddBorrower: undefined;
+  ArchivedBorrowers: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -67,6 +69,7 @@ export default function AppNavigator() {
         <Stack.Screen name="Reports" component={ReportsScreen} />
         <Stack.Screen name="AllBorrowers" component={AllBorrowersScreen} />
         <Stack.Screen name="AddBorrower" component={AddBorrowerScreen} />
+        <Stack.Screen name="ArchivedBorrowers" component={ArchivedBorrowersScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

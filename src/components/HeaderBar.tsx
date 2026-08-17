@@ -6,9 +6,10 @@ import { COLORS, SPACING, ROUNDS } from '../theme';
 interface HeaderBarProps {
   onBack?: () => void;
   showBack?: boolean;
+  showProfile?: boolean;
 }
 
-export default function HeaderBar({ onBack, showBack = true }: HeaderBarProps) {
+export default function HeaderBar({ onBack, showBack = true, showProfile = true }: HeaderBarProps) {
   return (
     <View style={styles.headerBar}>
       <View style={styles.headerLeft}>
@@ -24,9 +25,11 @@ export default function HeaderBar({ onBack, showBack = true }: HeaderBarProps) {
         <FontAwesome5 name="shopping-basket" size={16} color={COLORS.primary} />
         <Text style={styles.logoText}>JoSync</Text>
       </View>
-      <View style={styles.avatarContainer}>
-        <Ionicons name="person" size={17} color="#FFFFFF" />
-      </View>
+      {showProfile && (
+        <View style={styles.avatarContainer}>
+          <Ionicons name="person" size={17} color="#FFFFFF" />
+        </View>
+      )}
     </View>
   );
 }

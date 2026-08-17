@@ -47,13 +47,21 @@ export const productRepository = {
     return results;
   },
 
-  async updateProduct(id: string, name: string, categoryId: string): Promise<void> {
+  async updateProduct(id: string, name: string, categoryId: string, stockStatus?: 'high' | 'low' | 'out'): Promise<void> {
     const db = getDatabase();
     const now = new Date().toISOString();
-    const result = await db.runAsync(
-      `UPDATE products SET name = ?, category_id = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL;`,
-      [name, categoryId, now, id]
-    );
+    let result;
+    if (stockStatus) {
+      result = await db.runAsync(
+        `UPDATE products SET name = ?, category_id = ?, stock_status = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL;`,
+        [name, categoryId, stockStatus, now, id]
+      );
+    } else {
+      result = await db.runAsync(
+        `UPDATE products SET name = ?, category_id = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL;`,
+        [name, categoryId, now, id]
+      );
+    }
     if (result.changes === 0) {
       throw new Error(`Failed to update product: Product not found or already deleted.`);
     }

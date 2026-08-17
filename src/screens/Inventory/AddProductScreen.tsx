@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -47,18 +47,44 @@ export default function AddProductScreen({ route, navigation }: Props) {
   const insets = useSafeAreaInsets();
   const bottomPadding = insets.bottom;
   const barHeight = 68 + bottomPadding;
-  const { categoryId, categoryName } = route.params;
+  const { categoryId, categoryName, editProductId } = route.params;
 
   const [productName, setProductName] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<StockStatus>('HIGH');
 
+  useEffect(() => {
+    if (editProductId) {
+      const loadProduct = async () => {
+        try {
+          const product = await productService.getProductById(editProductId);
+          if (product) {
+            setProductName(product.name);
+            setSelectedStatus(product.stock_status.toUpperCase() as StockStatus);
+          }
+        } catch (error) {
+          console.error('Failed to load product:', error);
+        }
+      };
+      loadProduct();
+    }
+  }, [editProductId]);
+
   const handleSave = async () => {
     try {
-      await productService.createProduct(
-        categoryId,
-        productName,
-        selectedStatus.toLowerCase() as any
-      );
+      if (editProductId) {
+        await productService.updateProduct(
+          editProductId,
+          productName,
+          categoryId,
+          selectedStatus.toLowerCase() as any
+        );
+      } else {
+        await productService.createProduct(
+          categoryId,
+          productName,
+          selectedStatus.toLowerCase() as any
+        );
+      }
       navigation.goBack();
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Hindi ma-save ang paninda.');
@@ -83,12 +109,11 @@ export default function AddProductScreen({ route, navigation }: Props) {
         keyboardShouldPersistTaps="handled"
       >
         {/* 2. Subheader Area */}
-        {/* 2. Subheader Area */}
         <View style={styles.subheader}>
           <View style={styles.subheaderTitleContainer}>
-            <Text style={styles.subheaderTitle}>Magdagdag ng Paninda</Text>
+            <Text style={styles.subheaderTitle}>{editProductId ? 'I-edit ang Paninda' : 'Magdagdag ng Paninda'}</Text>
             <Text style={styles.subheaderSubtitle}>
-              Magdagdag ng bagong paninda sa {categoryName || 'Kategorya'}.
+              {editProductId ? `Baguhin ang detalye ng paninda sa ${categoryName || 'Kategorya'}.` : `Magdagdag ng bagong paninda sa ${categoryName || 'Kategorya'}.`}
             </Text>
           </View>
         </View>
