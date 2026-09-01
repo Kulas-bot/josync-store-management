@@ -9,15 +9,11 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
-  Clipboard,
-  Linking,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   MaterialCommunityIcons,
-  Ionicons,
-  FontAwesome5,
   Feather,
 } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -26,7 +22,6 @@ import HeaderBar from '../../components/HeaderBar';
 import { COLORS, SPACING, ROUNDS } from '../../theme';
 import { RootStackParamList } from '../../navigation/AppNavigator';
 import { borrowerService } from '../../services/borrowerService';
-import { generatePaymentReminder } from '../../utils/reminder';
 import { Borrower, BorrowedItem, Payment } from '../../types/db';
 
 // ─── Types & Configuration ───────────────────────────────────────────────────
@@ -50,8 +45,6 @@ export default function BorrowerDetailsScreen({ route, navigation }: Props) {
   const [restoreModalVisible, setRestoreModalVisible] = useState(false);
   const [actionsModalVisible, setActionsModalVisible] = useState(false);
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
-  const [reminderModalVisible, setReminderModalVisible] = useState(false);
-  const [generatedMessage, setGeneratedMessage] = useState('');
   
   const isArchived = !!details?.borrower.deleted_at;
 
@@ -85,66 +78,6 @@ export default function BorrowerDetailsScreen({ route, navigation }: Props) {
 
   const handleViewPaymentHistory = () => {
     navigation.navigate('PaymentHistory', { borrowerId, borrowerName: activeBorrowerName });
-  };
-
-  const handleSendReminder = () => {
-    if (!details) return;
-    const msg = generatePaymentReminder(activeBorrowerName, details.currentBalance);
-    setGeneratedMessage(msg);
-    setReminderModalVisible(true);
-  };
-
-  const handleCopyMessage = () => {
-    Clipboard.setString(generatedMessage);
-    Alert.alert('Nakopya', 'Nakopya na ang mensahe.');
-  };
-
-  const handleOpenMessenger = async () => {
-    // Copy message first — ready to paste when Messenger opens
-    Clipboard.setString(generatedMessage);
-
-    // Android intent URI targeting Messenger's known package (com.facebook.orca)
-    // This is more reliable than fb-messenger:// which silently resolves even when Messenger is absent
-    const intentUrl = 'intent://user/#Intent;package=com.facebook.orca;scheme=fb-messenger;end';
-    const webFallbackUrl = 'https://m.me';
-
-    console.log('[Reminder] Attempting Messenger launch...');
-    console.log('[Reminder] Messenger launch method: Android intent URI -', intentUrl);
-
-    try {
-      const canOpen = await Linking.canOpenURL(intentUrl);
-      console.log('[Reminder] Launch request accepted (canOpenURL):', canOpen);
-
-      if (canOpen) {
-        await Linking.openURL(intentUrl);
-        console.log('[Reminder] Fallback required: false — Messenger intent dispatched');
-      } else {
-        console.log('[Reminder] Fallback required: true — Messenger not found, trying web fallback');
-        const canOpenWeb = await Linking.canOpenURL(webFallbackUrl);
-        if (canOpenWeb) {
-          await Linking.openURL(webFallbackUrl);
-          console.log('[Reminder] Web Messenger fallback opened');
-        } else {
-          throw new Error('Neither Messenger nor web fallback could be opened');
-        }
-      }
-    } catch (err) {
-      console.error('[Reminder] All Messenger launch methods failed:', err);
-      Alert.alert(
-        'Hindi mabuksan ang Messenger.',
-        'Na-copy na ang reminder. Maaari mo itong i-paste sa Messenger.',
-        [
-          {
-            text: 'Kopyahin ang Mensahe',
-            onPress: () => {
-              Clipboard.setString(generatedMessage);
-              Alert.alert('Nakopya', 'Nakopya na ang mensahe.');
-            },
-          },
-          { text: 'OK', style: 'cancel' },
-        ]
-      );
-    }
   };
 
   const handleDeletePress = () => {
@@ -336,71 +269,9 @@ export default function BorrowerDetailsScreen({ route, navigation }: Props) {
           </TouchableOpacity>
         </View>
 
-        {/* 6. Smart Reminder Card */}
-        {!isArchived && details && details.currentBalance > 0 && (
-          <View style={styles.reminderCard}>
-            <View style={styles.reminderLeft}>
-              <View style={styles.reminderIconBadge}>
-                <MaterialCommunityIcons name="bell-outline" size={18} color={COLORS.primary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.reminderText}>Magpadala ng reminder?</Text>
-                <Text style={styles.reminderSubText}>Ipaalala ang kasalukuyang balanse.</Text>
-              </View>
-            </View>
-            <TouchableOpacity
-              style={styles.reminderSendBtn}
-              activeOpacity={0.7}
-              onPress={handleSendReminder}
-            >
-              <MaterialCommunityIcons name="send" size={16} color={COLORS.primary} />
-            </TouchableOpacity>
-          </View>
-        )}
-
         {/* Spacer for bottom navigation */}
         <View style={{ height: 100 }} />
       </ScrollView>
-
-      {/* Reminder Confirmation Modal */}
-      <Modal
-        animationType="fade"
-        transparent={true}
-        visible={reminderModalVisible}
-        onRequestClose={() => setReminderModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Magpadala ng reminder?</Text>
-            <View style={styles.previewMessageContainer}>
-              <Text style={styles.previewMessageText}>{generatedMessage}</Text>
-            </View>
-
-            <View style={styles.modalActionsVertical}>
-              <TouchableOpacity
-                style={[styles.modalBtn, styles.modalBtnPrimary]}
-                onPress={handleCopyMessage}
-              >
-                <Text style={styles.modalBtnPrimaryText}>Kopyahin ang Mensahe</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.modalBtn, styles.modalBtnPrimary]}
-                onPress={handleOpenMessenger}
-              >
-                <Text style={styles.modalBtnPrimaryText}>Buksan ang Messenger</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.modalBtn, styles.modalBtnSecondary]}
-                onPress={() => setReminderModalVisible(false)}
-              >
-                <Text style={styles.modalBtnSecondaryText}>Kanselahin</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
 
       {/* Actions Modal */}
       <Modal
@@ -441,16 +312,6 @@ export default function BorrowerDetailsScreen({ route, navigation }: Props) {
                     <Text style={{ fontWeight: 'bold', color: COLORS.primary }}>I-edit</Text>
                   </TouchableOpacity>
 
-                  <TouchableOpacity
-                    style={[styles.modalBtn, styles.modalBtnSecondary, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}
-                    onPress={() => {
-                      setActionsModalVisible(false);
-                      handleSendReminder();
-                    }}
-                  >
-                    <Feather name="bell" size={16} color={COLORS.primary} />
-                    <Text style={{ fontWeight: 'bold', color: COLORS.primary }}>Magpadala ng Reminder</Text>
-                  </TouchableOpacity>
 
                   <TouchableOpacity
                     style={[styles.modalBtn, styles.modalBtnSecondary, { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FCE4E4', borderColor: '#D32F2F' }]}
@@ -816,41 +677,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 
-  // ── Smart Reminder Card ──
-  reminderCard: {
-    backgroundColor: '#FCEAE3', // soft pinkish peach card
-    borderRadius: ROUNDS.md,
-    padding: SPACING.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: SPACING.md,
-    marginBottom: 80, // buffer for tab bar
-  },
-  reminderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.md,
-    flex: 1,
-  },
-  reminderIconBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  reminderText: {
-    fontSize: 12,
-    color: '#4A3E39',
-    fontWeight: '500',
-    lineHeight: 16,
-    flex: 1,
-  },
-  reminderSendBtn: {
-    padding: SPACING.xs,
-  },
 
   // ── Bottom Nav ──
   bottomTabBar: {
@@ -891,11 +717,6 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     marginTop: 2,
   },
-  reminderSubText: {
-    fontSize: 11,
-    color: COLORS.textMuted,
-    marginTop: 2,
-  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -918,20 +739,6 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     marginBottom: SPACING.md,
     textAlign: 'center',
-  },
-  previewMessageContainer: {
-    backgroundColor: '#FAF5EE',
-    borderRadius: ROUNDS.md,
-    padding: SPACING.md,
-    borderWidth: 1,
-    borderColor: '#EFECE9',
-    marginBottom: SPACING.lg,
-  },
-  previewMessageText: {
-    fontSize: 13,
-    color: COLORS.text,
-    lineHeight: 18,
-    fontStyle: 'italic',
   },
   modalActionsVertical: {
     gap: SPACING.sm,

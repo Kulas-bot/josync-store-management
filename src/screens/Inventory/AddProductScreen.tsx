@@ -22,6 +22,7 @@ import { COLORS, SPACING, ROUNDS } from '../../theme';
 import { RootStackParamList } from '../../navigation/AppNavigator';
 import { Alert } from 'react-native';
 import { productService } from '../../services';
+import { shoppingListService } from '../../services/shoppingListService';
 
 // ─── Types & Configuration ───────────────────────────────────────────────────
 
@@ -70,21 +71,68 @@ export default function AddProductScreen({ route, navigation }: Props) {
   }, [editProductId]);
 
   const handleSave = async () => {
+    const trimmedName = productName.trim();
+    if (!trimmedName) {
+      Alert.alert('Kailangan ang Pangalan', 'Mangyaring ilagay ang pangalan ng paninda.');
+      return;
+    }
+
     try {
+      let transitioned = false;
+      let savedProductId = editProductId;
+
       if (editProductId) {
+        const oldProduct = await productService.getProductById(editProductId);
+        if (!oldProduct) {
+          throw new Error('Product could not be found.');
+        }
+        const oldStatus = oldProduct.stock_status;
+        const newStatus = selectedStatus.toLowerCase() as 'high' | 'low' | 'out';
+
         await productService.updateProduct(
           editProductId,
-          productName,
+          trimmedName,
           categoryId,
-          selectedStatus.toLowerCase() as any
+          newStatus
         );
+
+        transitioned = (oldStatus !== newStatus) && (newStatus === 'low' || newStatus === 'out');
       } else {
-        await productService.createProduct(
+        const newProduct = await productService.createProduct(
           categoryId,
-          productName,
+          trimmedName,
           selectedStatus.toLowerCase() as any
         );
+        savedProductId = newProduct.id;
+        transitioned = selectedStatus === 'LOW' || selectedStatus === 'OUT';
       }
+
+      if (transitioned && savedProductId) {
+        const isAlreadyOnList = await shoppingListService.isProductOnActiveShoppingList(savedProductId);
+        if (!isAlreadyOnList) {
+          Alert.alert(
+            'Idagdag sa Listahan?',
+            `Gusto mo bang idagdag ang "${trimmedName}" sa listahan ng mga bibilhin?`,
+            [
+              { text: 'Hindi Muna', style: 'cancel', onPress: () => navigation.goBack() },
+              {
+                text: 'Idagdag',
+                onPress: async () => {
+                  try {
+                    await shoppingListService.addProductToShoppingList(savedProductId!);
+                  } catch (err: any) {
+                    Alert.alert('Error', err.message || 'Hindi naidagdag sa listahan.');
+                  } finally {
+                    navigation.goBack();
+                  }
+                }
+              }
+            ]
+          );
+          return;
+        }
+      }
+
       navigation.goBack();
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Hindi ma-save ang paninda.');

@@ -38,6 +38,7 @@ interface Category {
   iconFamily: 'MaterialCommunityIcons' | 'FontAwesome5' | 'Ionicons';
   iconBgColor: string;
   lowCount?: number;
+  outCount?: number;
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -74,9 +75,18 @@ function CategoryRow({ item, isEditing, onPress, onEdit, onDelete }: CategoryRow
 
       {/* Low stock badge + action icon */}
       <View style={styles.categoryRight}>
-        {item.lowCount !== undefined && !isEditing && (
-          <View style={styles.lowBadge}>
-            <Text style={styles.lowBadgeText}>{item.lowCount} Kaunti</Text>
+        {!isEditing && (
+          <View style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+            {item.lowCount !== undefined && item.lowCount > 0 && (
+              <View style={styles.lowBadge}>
+                <Text style={styles.lowBadgeText}>{item.lowCount} Kaunti</Text>
+              </View>
+            )}
+            {item.outCount !== undefined && item.outCount > 0 && (
+              <View style={[styles.lowBadge, { backgroundColor: '#FCE4E4' }]}>
+                <Text style={[styles.lowBadgeText, { color: '#D32F2F' }]}>{item.outCount} Ubos</Text>
+              </View>
+            )}
           </View>
         )}
         {isEditing ? (
@@ -113,14 +123,15 @@ export default function InventoryScreen({ navigation }: Props) {
       const prods = await productService.getAllProducts();
 
       const total = prods.length;
-      const lowTotal = prods.filter(p => p.stock_status === 'low' || p.stock_status === 'out').length;
+      const lowTotal = prods.filter(p => p.stock_status === 'low').length;
 
       setTotalItems(total);
       setLowStockCount(lowTotal);
 
       const mappedCategories = cats.map(cat => {
         const catProds = prods.filter(p => p.category_id === cat.id);
-        const lowProdsCount = catProds.filter(p => p.stock_status === 'low' || p.stock_status === 'out').length;
+        const lowProdsCount = catProds.filter(p => p.stock_status === 'low').length;
+        const outProdsCount = catProds.filter(p => p.stock_status === 'out').length;
 
         let iconName = 'format-list-bulleted';
         let iconBgColor = '#F2EBE8';
@@ -150,7 +161,8 @@ export default function InventoryScreen({ navigation }: Props) {
           iconName,
           iconFamily: 'MaterialCommunityIcons' as const,
           iconBgColor,
-          lowCount: lowProdsCount > 0 ? lowProdsCount : undefined
+          lowCount: lowProdsCount > 0 ? lowProdsCount : undefined,
+          outCount: outProdsCount > 0 ? outProdsCount : undefined
         };
       });
 

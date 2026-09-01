@@ -59,10 +59,7 @@ export default function ShoppingListScreen({ navigation }: Props) {
   const loadData = async () => {
     try {
       setLoading(true);
-      let list = await shoppingListService.getActiveShoppingList();
-      if (!list) {
-        list = await shoppingListService.createShoppingList(new Date().toISOString().split('T')[0]);
-      }
+      const list = await shoppingListService.getOrCreateActiveShoppingList();
       setListId(list.id);
 
       const [items, allProducts, allCategories] = await Promise.all([
@@ -113,22 +110,53 @@ export default function ShoppingListScreen({ navigation }: Props) {
     }
   };
 
-  const handleFinishShopping = async () => {
+  const executeCompletion = async (itemsToComplete: ShoppingProduct[]) => {
     if (!listId) return;
 
     try {
-      const purchasedItems = products.filter((p) => p.purchased);
-      for (const item of purchasedItems) {
+      setLoading(true);
+
+      // 1. Update stock status of all specified products to 'high' (Marami)
+      for (const item of itemsToComplete) {
         await productService.updateStockStatus(item.productId, 'high');
       }
 
+      // 2. Mark any unchecked item as purchased in the database
+      for (const item of itemsToComplete) {
+        if (!item.purchased) {
+          await shoppingListService.markItemAsPurchased(item.id, true);
+        }
+      }
+
+      // 3. Complete the active shopping list
       await shoppingListService.completeShoppingList(listId);
-      
+
       setModalVisible(false);
       navigation.navigate('Dashboard');
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Error finishing shopping');
+      Alert.alert('Error', error.message || 'Hindi matapos ang pagbili.');
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const handleTapFinish = async () => {
+    if (!listId || products.length === 0) return;
+
+    const hasUnchecked = products.some((p) => !p.purchased);
+
+    if (hasUnchecked) {
+      // Case 2: Some products are unchecked -> Show confirmation dialog
+      setModalVisible(true);
+    } else {
+      // Case 1: All products are checked -> Complete directly without confirmation dialog
+      await executeCompletion(products);
+    }
+  };
+
+  const handleConfirmAllPurchased = async () => {
+    // User confirms all items were purchased -> Treat ALL active items as purchased
+    await executeCompletion(products);
   };
 
   // Group products by category
@@ -299,21 +327,32 @@ export default function ShoppingListScreen({ navigation }: Props) {
       {/* 5. Sticky Bottom Action Button */}
       <View style={[styles.stickyButtonContainer, { bottom: bottomBarHeight + 16 }]}>
         <TouchableOpacity
-          style={styles.finishButton}
-          activeOpacity={0.85}
-          onPress={() => setModalVisible(true)}
+          style={[
+            styles.finishButton,
+            (products.length === 0 || loading) && styles.finishButtonDisabled,
+          ]}
+          disabled={products.length === 0 || loading}
+          activeOpacity={products.length === 0 || loading ? 1 : 0.85}
+          onPress={handleTapFinish}
         >
           <MaterialCommunityIcons
             name="check-all"
             size={18}
-            color="#FFFFFF"
+            color={products.length === 0 || loading ? '#8C827A' : '#FFFFFF'}
             style={styles.finishIcon}
           />
-          <Text style={styles.finishButtonText}>Tapusin ang Pagbili</Text>
+          <Text
+            style={[
+              styles.finishButtonText,
+              (products.length === 0 || loading) && styles.finishButtonTextDisabled,
+            ]}
+          >
+            Tapusin ang Pagbili
+          </Text>
         </TouchableOpacity>
       </View>
 
-      {/* 6. Confirmation Dialog Modal */}
+      {/* 6. Unchecked Items Confirmation Dialog Modal */}
       <Modal
         animationType="fade"
         transparent={true}
@@ -322,9 +361,9 @@ export default function ShoppingListScreen({ navigation }: Props) {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Tapusin ang Pagbili?</Text>
+            <Text style={styles.modalTitle}>May hindi ka na-check.</Text>
             <Text style={styles.modalMessage}>
-              Ito ay magmamarka sa lahat ng nabiling paninda bilang Marami ang Stock, at aalisin ang mga hindi nabili sa listahan ngayon.
+              Sigurado ka bang nabili mo lahat ng nasa listahan?
             </Text>
 
             <View style={styles.modalActions}>
@@ -332,14 +371,18 @@ export default function ShoppingListScreen({ navigation }: Props) {
                 style={[styles.modalBtn, styles.modalBtnCancel]}
                 onPress={() => setModalVisible(false)}
               >
-                <Text style={styles.modalBtnCancelText}>Kanselahin</Text>
+                <Text style={styles.modalBtnCancelText} numberOfLines={2}>
+                  Balikan ang Listahan
+                </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 style={[styles.modalBtn, styles.modalBtnFinish]}
-                onPress={handleFinishShopping}
+                onPress={handleConfirmAllPurchased}
               >
-                <Text style={styles.modalBtnFinishText}>Tapusin</Text>
+                <Text style={styles.modalBtnFinishText} numberOfLines={2}>
+                  Oo, Nabili Ko Lahat
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -599,6 +642,11 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 6,
   },
+  finishButtonDisabled: {
+    backgroundColor: '#D1CAC2', // Greyed out
+    shadowOpacity: 0,
+    elevation: 0,
+  },
   finishIcon: {
     marginRight: SPACING.xs,
   },
@@ -606,6 +654,9 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: 'bold',
+  },
+  finishButtonTextDisabled: {
+    color: '#8C827A',
   },
 
   // ── Modal Dialog ──
@@ -647,6 +698,7 @@ const styles = StyleSheet.create({
   modalBtn: {
     flex: 1,
     paddingVertical: 12,
+    paddingHorizontal: SPACING.xs,
     borderRadius: ROUNDS.full,
     alignItems: 'center',
     justifyContent: 'center',
@@ -658,16 +710,18 @@ const styles = StyleSheet.create({
   },
   modalBtnCancelText: {
     color: COLORS.primary,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: 'bold',
+    textAlign: 'center',
   },
   modalBtnFinish: {
     backgroundColor: '#10B981',
   },
   modalBtnFinishText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: 'bold',
+    textAlign: 'center',
   },
 
 });

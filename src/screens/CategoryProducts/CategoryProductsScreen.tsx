@@ -190,9 +190,10 @@ export default function CategoryProductsScreen({ route, navigation }: Props) {
     try {
       await shoppingListService.addProductToShoppingList(selectedProduct.id);
       Alert.alert('Tagumpay', `Naidagdag ang "${selectedProduct.name}" sa listahan ng bibilhin.`);
-      await loadData();
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Hindi naidagdag sa listahan.');
+    } finally {
+      await loadData();
     }
   };
 
@@ -526,19 +527,6 @@ export default function CategoryProductsScreen({ route, navigation }: Props) {
             <Text style={styles.modalSubTitle}>{selectedProduct?.name}</Text>
             
             <View style={styles.statusOptionsContainer}>
-              <TouchableOpacity
-                style={[styles.statusOptionBtn, { backgroundColor: '#E8F0FE', borderColor: COLORS.primary }]}
-                onPress={() => {
-                  setActionModalVisible(false);
-                  if (selectedProduct) {
-                    navigation.navigate('AddProduct', { categoryId, categoryName, editProductId: selectedProduct.id });
-                  }
-                }}
-              >
-                <Feather name="edit-2" size={16} color={COLORS.primary} style={{ marginRight: 8 }} />
-                <Text style={[styles.statusOptionText, { color: COLORS.primary }]}>I-edit</Text>
-              </TouchableOpacity>
-
               <TouchableOpacity
                 style={[styles.statusOptionBtn, { backgroundColor: '#FCE4E4', borderColor: '#D32F2F' }]}
                 onPress={() => {

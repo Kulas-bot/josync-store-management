@@ -12,6 +12,33 @@ export interface ShoppingListSummary {
 }
 
 export const shoppingListService = {
+  activeListPromise: null as Promise<ShoppingList> | null,
+
+  async getOrCreateActiveShoppingList(): Promise<ShoppingList> {
+    if (this.activeListPromise) {
+      return this.activeListPromise;
+    }
+
+    this.activeListPromise = (async () => {
+      try {
+        let activeList = await shoppingListRepository.getActiveShoppingList();
+        if (!activeList) {
+          const now = new Date();
+          const year = now.getFullYear();
+          const month = String(now.getMonth() + 1).padStart(2, '0');
+          const day = String(now.getDate()).padStart(2, '0');
+          const localDateStr = `${year}-${month}-${day}`;
+          activeList = await shoppingListRepository.createShoppingList(localDateStr, 'active');
+        }
+        return activeList;
+      } finally {
+        this.activeListPromise = null;
+      }
+    })();
+
+    return this.activeListPromise;
+  },
+
   async createShoppingList(shoppingDate: string): Promise<ShoppingList> {
     if (!shoppingDate || !shoppingDate.trim()) {
       throw new Error('Invalid shopping date.');
@@ -51,11 +78,8 @@ export const shoppingListService = {
       throw new Error('Product could not be found.');
     }
 
-    // 2. Validate active shopping list exists
-    const activeList = await shoppingListRepository.getActiveShoppingList();
-    if (!activeList) {
-      throw new Error('No active shopping list exists.');
-    }
+    // 2. Validate active shopping list exists (Auto-create if none exists)
+    const activeList = await this.getOrCreateActiveShoppingList();
 
     // 3. Check if product is already on the shopping list
     const items = await shoppingListItemRepository.getItemsByShoppingList(activeList.id);
