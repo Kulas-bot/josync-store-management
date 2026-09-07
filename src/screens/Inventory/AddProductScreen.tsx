@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   TextInput,
   Platform,
+  Modal,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -21,8 +22,9 @@ import HeaderBar from '../../components/HeaderBar';
 import { COLORS, SPACING, ROUNDS } from '../../theme';
 import { RootStackParamList } from '../../navigation/AppNavigator';
 import { Alert } from 'react-native';
-import { productService } from '../../services';
+import { productService, storeService } from '../../services';
 import { shoppingListService } from '../../services/shoppingListService';
+import { Store } from '../../types/db';
 
 // ─── Types & Configuration ───────────────────────────────────────────────────
 
@@ -51,7 +53,23 @@ export default function AddProductScreen({ route, navigation }: Props) {
   const { categoryId, categoryName, editProductId } = route.params;
 
   const [productName, setProductName] = useState('');
+  const [storeNameInput, setStoreNameInput] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<StockStatus>('HIGH');
+  const [existingStores, setExistingStores] = useState<Store[]>([]);
+  const [isRestockingLocked, setIsRestockingLocked] = useState(false);
+  const [addToListPrompt, setAddToListPrompt] = useState<{ visible: boolean; productId: string; productName: string }>({ visible: false, productId: '', productName: '' });
+
+  useEffect(() => {
+    const loadStores = async () => {
+      try {
+        const stores = await storeService.getAllStores();
+        setExistingStores(stores);
+      } catch (err) {
+        console.error('Failed to load stores:', err);
+      }
+    };
+    loadStores();
+  }, []);
 
   useEffect(() => {
     if (editProductId) {
@@ -61,6 +79,15 @@ export default function AddProductScreen({ route, navigation }: Props) {
           if (product) {
             setProductName(product.name);
             setSelectedStatus(product.stock_status.toUpperCase() as StockStatus);
+            if (product.store_id) {
+              const store = await storeService.getStoreById(product.store_id);
+              if (store) {
+                setStoreNameInput(store.name);
+              }
+            }
+
+            const isOnList = await shoppingListService.isProductOnActiveShoppingList(editProductId);
+            setIsRestockingLocked(isOnList && product.stock_status !== 'high');
           }
         } catch (error) {
           console.error('Failed to load product:', error);
@@ -70,6 +97,17 @@ export default function AddProductScreen({ route, navigation }: Props) {
     }
   }, [editProductId]);
 
+  const handleSelectStatus = (status: StockStatus) => {
+    if (isRestockingLocked && status === 'HIGH') {
+      Alert.alert(
+        'Naka-lock ang Paninda (Restocking)',
+        'Kasalukuyang nasa Listahan ng Bibilhin ang panindang ito. Tapusin ang pagbili sa Listahan para maibalik sa Marami.'
+      );
+      return;
+    }
+    setSelectedStatus(status);
+  };
+
   const handleSave = async () => {
     const trimmedName = productName.trim();
     if (!trimmedName) {
@@ -77,66 +115,71 @@ export default function AddProductScreen({ route, navigation }: Props) {
       return;
     }
 
+    if (isRestockingLocked && selectedStatus === 'HIGH') {
+      Alert.alert(
+        'Naka-lock ang Paninda',
+        'Kasalukuyang nasa Listahan ng Bibilhin ang panindang ito para sa restocking. Hindi maaaring gawing Marami nang direkta.'
+      );
+      return;
+    }
+
     try {
-      let transitioned = false;
+      let resolvedStoreId: string | null = null;
+      const trimmedStoreName = storeNameInput.trim();
+      if (trimmedStoreName) {
+        const store = await storeService.getOrCreateStore(trimmedStoreName);
+        resolvedStoreId = store.id;
+      }
+
       let savedProductId = editProductId;
 
       if (editProductId) {
-        const oldProduct = await productService.getProductById(editProductId);
-        if (!oldProduct) {
-          throw new Error('Product could not be found.');
-        }
-        const oldStatus = oldProduct.stock_status;
         const newStatus = selectedStatus.toLowerCase() as 'high' | 'low' | 'out';
 
         await productService.updateProduct(
           editProductId,
           trimmedName,
           categoryId,
-          newStatus
+          newStatus,
+          resolvedStoreId
         );
-
-        transitioned = (oldStatus !== newStatus) && (newStatus === 'low' || newStatus === 'out');
       } else {
         const newProduct = await productService.createProduct(
           categoryId,
           trimmedName,
-          selectedStatus.toLowerCase() as any
+          selectedStatus.toLowerCase() as any,
+          resolvedStoreId
         );
         savedProductId = newProduct.id;
-        transitioned = selectedStatus === 'LOW' || selectedStatus === 'OUT';
       }
 
-      if (transitioned && savedProductId) {
-        const isAlreadyOnList = await shoppingListService.isProductOnActiveShoppingList(savedProductId);
-        if (!isAlreadyOnList) {
-          Alert.alert(
-            'Idagdag sa Listahan?',
-            `Gusto mo bang idagdag ang "${trimmedName}" sa listahan ng mga bibilhin?`,
-            [
-              { text: 'Hindi Muna', style: 'cancel', onPress: () => navigation.goBack() },
-              {
-                text: 'Idagdag',
-                onPress: async () => {
-                  try {
-                    await shoppingListService.addProductToShoppingList(savedProductId!);
-                  } catch (err: any) {
-                    Alert.alert('Error', err.message || 'Hindi naidagdag sa listahan.');
-                  } finally {
-                    navigation.goBack();
-                  }
-                }
-              }
-            ]
-          );
-          return;
-        }
+      // If status is LOW or OUT, show custom confirm modal
+      if ((selectedStatus === 'LOW' || selectedStatus === 'OUT') && savedProductId) {
+        setAddToListPrompt({ visible: true, productId: savedProductId, productName: trimmedName });
+        return;
       }
 
       navigation.goBack();
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Hindi ma-save ang paninda.');
     }
+  };
+
+  const handleAddToListConfirm = async () => {
+    const { productId } = addToListPrompt;
+    setAddToListPrompt({ visible: false, productId: '', productName: '' });
+    try {
+      await shoppingListService.addProductToShoppingList(productId);
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Hindi naidagdag sa listahan.');
+    } finally {
+      navigation.goBack();
+    }
+  };
+
+  const handleAddToListDismiss = () => {
+    setAddToListPrompt({ visible: false, productId: '', productName: '' });
+    navigation.goBack();
   };
 
   const handleCancel = () => {
@@ -179,43 +222,112 @@ export default function AddProductScreen({ route, navigation }: Props) {
           />
         </View>
 
-        {/* 4. Stock Status Card */}
+        {/* 4. Store Assignment Card (Physical Store / Tindahan kung saan binibili) */}
+        <View style={styles.infoCard}>
+          <View style={styles.storeHeaderRow}>
+            <Text style={styles.fieldLabel}>Tindahan / Bilihan (Physical Store)</Text>
+            <Text style={styles.optionalLabel}>Opsiyonal</Text>
+          </View>
+          <TextInput
+            style={styles.textInput}
+            placeholder="Hal. Ate Nena Candy Store, Divisoria..."
+            placeholderTextColor={COLORS.textMuted}
+            value={storeNameInput}
+            onChangeText={setStoreNameInput}
+            maxLength={50}
+          />
+          <Text style={styles.helperText}>
+            Saan madalas binibili ang panindang ito? (Hal. Toy Store, School Supplies Store)
+          </Text>
+
+          {existingStores.length > 0 && (
+            <View style={styles.chipsContainer}>
+              <Text style={styles.chipsTitle}>Mga Naka-save na Tindahan:</Text>
+              <View style={styles.chipsRow}>
+                {existingStores.map((store) => {
+                  const isSelected = storeNameInput.trim().toLowerCase() === store.name.toLowerCase();
+                  return (
+                    <TouchableOpacity
+                      key={store.id}
+                      style={[styles.chip, isSelected && styles.chipSelected]}
+                      onPress={() => setStoreNameInput(store.name)}
+                      activeOpacity={0.8}
+                    >
+                      <MaterialCommunityIcons
+                        name="storefront-outline"
+                        size={12}
+                        color={isSelected ? '#FFFFFF' : COLORS.primary}
+                        style={{ marginRight: 4 }}
+                      />
+                      <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>
+                        {store.name}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          )}
+        </View>
+
+        {/* 5. Stock Status Card */}
         <View style={styles.statusCard}>
           <Text style={styles.fieldLabel}>Katayuan ng Stock</Text>
+
+          {isRestockingLocked && (
+            <View style={styles.lockedNoticeBox}>
+              <MaterialCommunityIcons name="lock-outline" size={16} color={COLORS.primary} />
+              <Text style={styles.lockedNoticeText}>
+                Naka-lock para sa restocking dahil nasa Listahan ng Bibilhin. Tapusin ang pagbili para maibalik sa Marami.
+              </Text>
+            </View>
+          )}
 
           <View style={styles.statusOptionsList}>
             {STATUS_OPTIONS.map((option) => {
               const isSelected = option.status === selectedStatus;
+              const isOptionLocked = isRestockingLocked && option.status === 'HIGH';
+
               return (
                 <TouchableOpacity
                   key={option.status}
                   style={[
                     styles.statusOptionRow,
-                    isSelected ? styles.statusOptionRowSelected : styles.statusOptionRowUnselected,
+                    isSelected && !isOptionLocked ? styles.statusOptionRowSelected : styles.statusOptionRowUnselected,
+                    isOptionLocked && styles.statusOptionRowLocked,
                   ]}
-                  onPress={() => setSelectedStatus(option.status)}
-                  activeOpacity={0.8}
+                  onPress={() => handleSelectStatus(option.status)}
+                  activeOpacity={isOptionLocked ? 1 : 0.8}
                 >
                   <View style={styles.statusOptionLeft}>
-                    <View style={[styles.statusDot, { backgroundColor: option.dotColor }]} />
-                    <Text style={styles.statusOptionText}>{option.label}</Text>
+                    <View style={[styles.statusDot, { backgroundColor: isOptionLocked ? '#8C827A' : option.dotColor }]} />
+                    <Text style={[styles.statusOptionText, isOptionLocked && { color: '#8C827A' }]}>
+                      {option.label}
+                    </Text>
                   </View>
 
-                  {isSelected && (
+                  {isOptionLocked ? (
+                    <MaterialCommunityIcons
+                      name="lock"
+                      size={18}
+                      color="#8C827A"
+                      style={styles.checkIcon}
+                    />
+                  ) : isSelected ? (
                     <MaterialCommunityIcons
                       name="check-circle"
                       size={20}
                       color={COLORS.primary}
                       style={styles.checkIcon}
                     />
-                  )}
+                  ) : null}
                 </TouchableOpacity>
               );
             })}
           </View>
         </View>
 
-        {/* 5. Empty State / Sync Section */}
+        {/* 6. Empty State / Info Section */}
         <View style={styles.emptyStateContainer}>
           <MaterialCommunityIcons
             name="archive-outline"
@@ -224,11 +336,11 @@ export default function AddProductScreen({ route, navigation }: Props) {
             style={styles.emptyStateIcon}
           />
           <Text style={styles.emptyStateText}>
-            Nakatutulong ang pagdagdag ng paninda para laging updated ang shop
+            Nakatutulong ang pag-organisa ng paninda ayon sa kategorya at tindahan para mas madaling mamili
           </Text>
         </View>
 
-        {/* 6. Action Buttons */}
+        {/* 7. Action Buttons */}
         <View style={styles.actionsContainer}>
           <TouchableOpacity
             style={styles.saveButton}
@@ -254,7 +366,7 @@ export default function AddProductScreen({ route, navigation }: Props) {
         </View>
       </ScrollView>
 
-      {/* 7. Mock Bottom Navigation Bar */}
+      {/* 8. Mock Bottom Navigation Bar */}
       <View style={[styles.bottomTabBar, { height: barHeight, paddingBottom: bottomPadding }]}>
         {/* Home */}
         <TouchableOpacity
@@ -308,21 +420,48 @@ export default function AddProductScreen({ route, navigation }: Props) {
           <Text style={styles.inactiveTabText}>Buod</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Idagdag sa Listahan? Confirmation Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={addToListPrompt.visible}
+        onRequestClose={handleAddToListDismiss}
+      >
+        <View style={styles.confirmModalOverlay}>
+          <View style={styles.confirmModalContent}>
+            <Text style={styles.confirmModalTitle}>Idagdag sa Listahan?</Text>
+            <Text style={styles.confirmModalMessage}>
+              Gusto mo bang idagdag ang "{addToListPrompt.productName}" sa listahan ng mga bibilhin?
+            </Text>
+            <View style={styles.confirmModalActions}>
+              <TouchableOpacity
+                style={styles.confirmBtnCancel}
+                activeOpacity={0.8}
+                onPress={handleAddToListDismiss}
+              >
+                <Text style={styles.confirmBtnCancelText}>Hindi Muna</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.confirmBtnAdd}
+                activeOpacity={0.8}
+                onPress={handleAddToListConfirm}
+              >
+                <Text style={styles.confirmBtnAddText}>Idagdag</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: COLORS.background,
   },
-
-
-
-  // ── Scroll Content ──
   scrollView: {
     flex: 1,
   },
@@ -331,15 +470,10 @@ const styles = StyleSheet.create({
     paddingTop: SPACING.md,
     paddingBottom: SPACING.xl,
   },
-
-  // ── Subheader ──
   subheader: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: SPACING.lg,
-  },
-  backButton: {
-    marginRight: SPACING.md,
   },
   subheaderTitleContainer: {
     flex: 1,
@@ -354,8 +488,6 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     marginTop: 2,
   },
-
-  // ── Card Containers ──
   infoCard: {
     backgroundColor: COLORS.surface,
     borderRadius: ROUNDS.md,
@@ -372,13 +504,22 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
     marginBottom: SPACING.md,
   },
-
-  // ── Input Fields ──
   fieldLabel: {
     fontSize: 14,
     fontWeight: 'bold',
     color: COLORS.text,
     marginBottom: SPACING.sm,
+  },
+  storeHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.xs,
+  },
+  optionalLabel: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+    fontStyle: 'italic',
   },
   textInput: {
     backgroundColor: COLORS.background,
@@ -396,8 +537,60 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     marginTop: SPACING.xs,
   },
-
-  // ── Status Select Options ──
+  chipsContainer: {
+    marginTop: SPACING.sm,
+  },
+  chipsTitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.textMuted,
+    marginBottom: 6,
+  },
+  chipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FCEAE3',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: ROUNDS.full,
+    borderWidth: 1,
+    borderColor: '#F0D5C9',
+  },
+  chipSelected: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  chipText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.primary,
+  },
+  chipTextSelected: {
+    color: '#FFFFFF',
+  },
+  lockedNoticeBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FCEAE3',
+    padding: SPACING.sm,
+    borderRadius: ROUNDS.sm,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: '#F0D5C9',
+  },
+  lockedNoticeText: {
+    flex: 1,
+    fontSize: 11,
+    color: COLORS.primary,
+    lineHeight: 15,
+    fontWeight: '600',
+  },
   statusOptionsList: {
     gap: SPACING.sm,
   },
@@ -422,6 +615,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#EFECE9',
     borderColor: 'transparent',
   },
+  statusOptionRowLocked: {
+    backgroundColor: '#EFECE9',
+    borderColor: '#D1CAC2',
+    opacity: 0.65,
+  },
   statusOptionLeft: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -440,8 +638,6 @@ const styles = StyleSheet.create({
   checkIcon: {
     marginLeft: SPACING.sm,
   },
-
-  // ── Empty State ──
   emptyStateContainer: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -455,11 +651,9 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     textAlign: 'center',
   },
-
-  // ── Action Buttons ──
   actionsContainer: {
     gap: SPACING.sm,
-    marginBottom: 80, // buffer for tab bar
+    marginBottom: 80,
   },
   saveButton: {
     backgroundColor: COLORS.primary,
@@ -491,8 +685,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
   },
-
-  // ── Bottom Nav ──
   bottomTabBar: {
     position: 'absolute',
     bottom: 0,
@@ -530,5 +722,66 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: COLORS.textMuted,
     marginTop: 2,
+  },
+
+  // ── Idagdag sa Listahan? Confirm Modal ──
+  confirmModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.lg,
+  },
+  confirmModalContent: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 20,
+    padding: SPACING.lg,
+    width: '100%',
+    maxWidth: 340,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  confirmModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    marginBottom: 10,
+  },
+  confirmModalMessage: {
+    fontSize: 16,
+    color: COLORS.textMuted,
+    lineHeight: 24,
+    marginBottom: SPACING.lg,
+  },
+  confirmModalActions: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  confirmBtnCancel: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: ROUNDS.full,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confirmBtnCancelText: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: COLORS.text,
+  },
+  confirmBtnAdd: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: ROUNDS.full,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confirmBtnAddText: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
   },
 });

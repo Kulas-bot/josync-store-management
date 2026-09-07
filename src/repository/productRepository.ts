@@ -3,15 +3,20 @@ import { Product } from '../types/db';
 import { generateUUID } from '../utils/uuid';
 
 export const productRepository = {
-  async createProduct(categoryId: string, name: string, stockStatus: 'high' | 'low' | 'out'): Promise<Product> {
+  async createProduct(
+    categoryId: string,
+    name: string,
+    stockStatus: 'high' | 'low' | 'out',
+    storeId?: string | null
+  ): Promise<Product> {
     const db = getDatabase();
     const id = generateUUID();
     const now = new Date().toISOString();
     
     await db.runAsync(
-      `INSERT INTO products (id, category_id, name, stock_status, created_at, updated_at, deleted_at)
-       VALUES (?, ?, ?, ?, ?, ?, NULL);`,
-      [id, categoryId, name, stockStatus, now, now]
+      `INSERT INTO products (id, category_id, store_id, name, stock_status, created_at, updated_at, deleted_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NULL);`,
+      [id, categoryId, storeId ?? null, name, stockStatus, now, now]
     );
 
     const product = await this.getProductById(id);
@@ -47,21 +52,37 @@ export const productRepository = {
     return results;
   },
 
-  async updateProduct(id: string, name: string, categoryId: string, stockStatus?: 'high' | 'low' | 'out'): Promise<void> {
+  async getProductsByStore(storeId: string): Promise<Product[]> {
+    const db = getDatabase();
+    const results = await db.getAllAsync<Product>(
+      `SELECT * FROM products WHERE store_id = ? AND deleted_at IS NULL ORDER BY name ASC;`,
+      [storeId]
+    );
+    return results;
+  },
+
+  async updateProduct(
+    id: string,
+    name: string,
+    categoryId: string,
+    stockStatus?: 'high' | 'low' | 'out',
+    storeId?: string | null
+  ): Promise<void> {
     const db = getDatabase();
     const now = new Date().toISOString();
-    let result;
-    if (stockStatus) {
-      result = await db.runAsync(
-        `UPDATE products SET name = ?, category_id = ?, stock_status = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL;`,
-        [name, categoryId, stockStatus, now, id]
-      );
-    } else {
-      result = await db.runAsync(
-        `UPDATE products SET name = ?, category_id = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL;`,
-        [name, categoryId, now, id]
-      );
+    
+    const existing = await this.getProductById(id);
+    if (!existing) {
+      throw new Error(`Failed to update product: Product not found or already deleted.`);
     }
+
+    const resolvedStatus = stockStatus ?? existing.stock_status;
+    const resolvedStoreId = storeId !== undefined ? storeId : existing.store_id ?? null;
+
+    const result = await db.runAsync(
+      `UPDATE products SET name = ?, category_id = ?, store_id = ?, stock_status = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL;`,
+      [name, categoryId, resolvedStoreId, resolvedStatus, now, id]
+    );
     if (result.changes === 0) {
       throw new Error(`Failed to update product: Product not found or already deleted.`);
     }

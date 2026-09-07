@@ -1,4 +1,5 @@
 export * from './categoryRepository';
+export * from './storeRepository';
 export * from './productRepository';
 export * from './borrowerRepository';
 export * from './borrowedItemRepository';

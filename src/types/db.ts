@@ -6,9 +6,18 @@ export interface Category {
   deleted_at: string | null;
 }
 
+export interface Store {
+  id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
 export interface Product {
   id: string;
   category_id: string;
+  store_id?: string | null;
   name: string;
   stock_status: 'high' | 'low' | 'out';
   created_at: string;

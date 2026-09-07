@@ -11,16 +11,28 @@ export const CREATE_CATEGORIES_TABLE = `
   );
 `;
 
+export const CREATE_STORES_TABLE = `
+  CREATE TABLE IF NOT EXISTS stores (
+    id TEXT PRIMARY KEY NOT NULL,
+    name TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT
+  );
+`;
+
 export const CREATE_PRODUCTS_TABLE = `
   CREATE TABLE IF NOT EXISTS products (
     id TEXT PRIMARY KEY NOT NULL,
     category_id TEXT NOT NULL,
+    store_id TEXT,
     name TEXT NOT NULL,
     stock_status TEXT NOT NULL CHECK(stock_status IN ('high', 'low', 'out')),
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     deleted_at TEXT,
-    FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE RESTRICT ON UPDATE CASCADE
+    FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE RESTRICT ON UPDATE CASCADE,
+    FOREIGN KEY (store_id) REFERENCES stores (id) ON DELETE SET NULL ON UPDATE CASCADE
   );
 `;
 
@@ -113,6 +125,10 @@ export const CREATE_INDEX_PRODUCTS_CATEGORY = `
   CREATE INDEX IF NOT EXISTS idx_products_category ON products (category_id);
 `;
 
+export const CREATE_INDEX_PRODUCTS_STORE = `
+  CREATE INDEX IF NOT EXISTS idx_products_store ON products (store_id);
+`;
+
 export const CREATE_INDEX_BORROWED_ITEMS_BORROWER = `
   CREATE INDEX IF NOT EXISTS idx_borrowed_items_borrower ON borrowed_items (borrower_id);
 `;
@@ -141,8 +157,13 @@ export const CREATE_INDEX_CATEGORIES_NAME_ACTIVE = `
   CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_name_active ON categories (name) WHERE deleted_at IS NULL;
 `;
 
+export const CREATE_INDEX_STORES_NAME_ACTIVE = `
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_stores_name_active ON stores (name) WHERE deleted_at IS NULL;
+`;
+
 export const SCHEMA_V1_QUERIES = [
   CREATE_CATEGORIES_TABLE,
+  CREATE_STORES_TABLE,
   CREATE_PRODUCTS_TABLE,
   CREATE_BORROWERS_TABLE,
   CREATE_BORROWED_ITEMS_TABLE,
@@ -151,6 +172,7 @@ export const SCHEMA_V1_QUERIES = [
   CREATE_SHOPPING_LISTS_TABLE,
   CREATE_SHOPPING_LIST_ITEMS_TABLE,
   CREATE_INDEX_PRODUCTS_CATEGORY,
+  CREATE_INDEX_PRODUCTS_STORE,
   CREATE_INDEX_BORROWED_ITEMS_BORROWER,
   CREATE_INDEX_BORROWED_ITEMS_PRODUCT,
   CREATE_INDEX_PAYMENTS_BORROWER,
@@ -158,4 +180,5 @@ export const SCHEMA_V1_QUERIES = [
   CREATE_INDEX_SHOPPING_LIST_ITEMS_PRODUCT,
   CREATE_INDEX_DAILY_SALES_DATE,
   CREATE_INDEX_CATEGORIES_NAME_ACTIVE,
+  CREATE_INDEX_STORES_NAME_ACTIVE,
 ];

@@ -6,12 +6,9 @@ import {
   Animated,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import {
-  MaterialCommunityIcons,
-  FontAwesome5,
-} from '@expo/vector-icons';
+import { FontAwesome5 } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { COLORS, ROUNDS } from '../../theme';
+import { COLORS } from '../../theme';
 import { RootStackParamList } from '../../navigation/AppNavigator';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -46,17 +43,13 @@ export default function SplashScreen({ navigation }: Props) {
 
 
 
-      {/* 2. Animated Center Branding Group */}
+      {/* Animated Center Branding Group */}
       <Animated.View style={[styles.brandingGroup, { opacity: fadeAnim }]}>
-        {/* Logo Card */}
-        <View style={styles.logoCard}>
-          <FontAwesome5 name="shopping-basket" size={42} color={COLORS.primary} />
-          <Text style={styles.logoCardText}>JoSync</Text>
-        </View>
-
-        {/* Tagline */}
+        <FontAwesome5 name="shopping-basket" size={56} color={COLORS.primary} />
         <Text style={styles.tagline}>
-          Tindahan mo, naka-JoSync.
+          {'Tindahan mo, naka-'}
+          <Text style={styles.wordmark}>JoSync</Text>
+          {'.'}
         </Text>
       </Animated.View>
     </View>
@@ -73,48 +66,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  // Watermark Background
-  watermarkContainer: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  watermarkIcon: {
-    opacity: 0.05, // very subtle, non-distracting opacity
-  },
-
   // Center Branding Layout
   brandingGroup: {
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1,
   },
-  logoCard: {
-    width: 140,
-    height: 140,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 4,
-    marginBottom: 28,
-    gap: 8,
-  },
-  logoCardText: {
-    fontSize: 16,
+  wordmark: {
+    fontSize: 15,
     fontWeight: 'bold',
     color: COLORS.primary,
-  },
-  appName: {
-    fontSize: 34,
-    fontWeight: 'bold',
-    color: COLORS.primary,
-    marginBottom: 10,
-    textAlign: 'center',
+    letterSpacing: 0.5,
   },
   tagline: {
     fontSize: 15,
@@ -122,5 +84,6 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     textAlign: 'center',
     lineHeight: 22,
+    marginTop: 20,
   },
 });

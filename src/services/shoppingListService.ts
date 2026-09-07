@@ -1,6 +1,8 @@
 import { shoppingListRepository } from '../repository/shoppingListRepository';
 import { shoppingListItemRepository } from '../repository/shoppingListItemRepository';
 import { productRepository } from '../repository/productRepository';
+import { storeRepository } from '../repository/storeRepository';
+import { categoryRepository } from '../repository/categoryRepository';
 import { ShoppingList, ShoppingListItem } from '../types/db';
 
 export interface ShoppingListSummary {
@@ -9,6 +11,27 @@ export interface ShoppingListSummary {
   unpurchasedItems: number;
   shoppingDate: string;
   status: 'active' | 'completed';
+}
+
+export interface StoreShoppingItem {
+  id: string; // ShoppingListItem ID
+  productId: string;
+  productName: string;
+  categoryId: string;
+  categoryName: string;
+  statusAtCreation: 'low' | 'out';
+  purchased: boolean;
+}
+
+export interface StoreShoppingGroup {
+  storeId: string | null;
+  storeName: string;
+  items: StoreShoppingItem[];
+  totalCount: number;
+  purchasedCount: number;
+  unpurchasedCount: number;
+  lowStockCount: number;
+  outOfStockCount: number;
 }
 
 export const shoppingListService = {
@@ -187,5 +210,81 @@ export const shoppingListService = {
       shoppingDate: list.shopping_date,
       status: list.status
     };
+  },
+
+  async getStoreGroupedShoppingItems(shoppingListId: string): Promise<StoreShoppingGroup[]> {
+    const [items, allProducts, allCategories, allStores] = await Promise.all([
+      shoppingListItemRepository.getItemsByShoppingList(shoppingListId),
+      productRepository.getAllProducts(),
+      categoryRepository.getAllCategories(),
+      storeRepository.getAllStores(),
+    ]);
+
+    const productMap = new Map(allProducts.map((p) => [p.id, p]));
+    const categoryMap = new Map(allCategories.map((c) => [c.id, c.name]));
+    const storeMap = new Map(allStores.map((s) => [s.id, s.name]));
+
+    const groupMap = new Map<string, StoreShoppingGroup>();
+
+    for (const item of items) {
+      const product = productMap.get(item.product_id);
+      const storeId = product?.store_id || null;
+      const groupKey = storeId ?? '__unassigned__';
+
+      let group = groupMap.get(groupKey);
+      if (!group) {
+        let storeName = 'Walang Nakatalagang Tindahan';
+        if (storeId && storeMap.has(storeId)) {
+          storeName = storeMap.get(storeId)!;
+        }
+        group = {
+          storeId,
+          storeName,
+          items: [],
+          totalCount: 0,
+          purchasedCount: 0,
+          unpurchasedCount: 0,
+          lowStockCount: 0,
+          outOfStockCount: 0,
+        };
+        groupMap.set(groupKey, group);
+      }
+
+      const categoryName = (product?.category_id && categoryMap.get(product.category_id)) || 'Uncategorized';
+      const isPurchased = item.purchased === 1;
+
+      group.items.push({
+        id: item.id,
+        productId: item.product_id,
+        productName: product?.name || 'Unknown Product',
+        categoryId: product?.category_id || '',
+        categoryName,
+        statusAtCreation: item.status_at_creation,
+        purchased: isPurchased,
+      });
+
+      group.totalCount += 1;
+      if (isPurchased) {
+        group.purchasedCount += 1;
+      } else {
+        group.unpurchasedCount += 1;
+      }
+
+      if (item.status_at_creation === 'out') {
+        group.outOfStockCount += 1;
+      } else {
+        group.lowStockCount += 1;
+      }
+    }
+
+    // Return groups: named stores first in alphabetical order, unassigned store last
+    const groups = Array.from(groupMap.values());
+    groups.sort((a, b) => {
+      if (a.storeId === null) return 1;
+      if (b.storeId === null) return -1;
+      return a.storeName.localeCompare(b.storeName);
+    });
+
+    return groups;
   }
 };

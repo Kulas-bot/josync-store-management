@@ -1,5 +1,6 @@
 import { initDatabase } from './index';
 import { categoryRepository } from '../repository/categoryRepository';
+import { storeRepository } from '../repository/storeRepository';
 import { productRepository } from '../repository/productRepository';
 import { borrowerRepository } from '../repository/borrowerRepository';
 import { borrowedItemRepository } from '../repository/borrowedItemRepository';
@@ -9,7 +10,7 @@ import { shoppingListRepository } from '../repository/shoppingListRepository';
 import { shoppingListItemRepository } from '../repository/shoppingListItemRepository';
 
 /**
- * Runs a complete test suite of all 14 repository criteria requested in Phase 3.2.
+ * Runs a complete test suite of all repository criteria.
  * Logs step-by-step success status to console.
  */
 export async function runRepositoryVerificationTest(): Promise<boolean> {
@@ -42,14 +43,23 @@ export async function runRepositoryVerificationTest(): Promise<boolean> {
     }
     console.log('✔ [3] Category updated successfully:', updatedCat);
 
-    // 4. Create a product
-    const product = await productRepository.createProduct(category.id, 'Ballpen Blue', 'high');
+    // 3b. Create and retrieve a Store
+    const store = await storeRepository.createStore('Mang Juan School Supplies');
+    console.log('✔ [3b] Store created:', store);
+    const retrievedStore = await storeRepository.getStoreById(store.id);
+    if (!retrievedStore || retrievedStore.name !== 'Mang Juan School Supplies') {
+      throw new Error('Failed to retrieve correct store');
+    }
+    console.log('✔ [3c] Store retrieved successfully.');
+
+    // 4. Create a product with category and store
+    const product = await productRepository.createProduct(category.id, 'Ballpen Blue', 'high', store.id);
     console.log('✔ [4] Product created:', product);
 
     // 5. Retrieve the product
     const retrievedProd = await productRepository.getProductById(product.id);
-    if (!retrievedProd || retrievedProd.name !== 'Ballpen Blue') {
-      throw new Error('Failed to retrieve correct product');
+    if (!retrievedProd || retrievedProd.name !== 'Ballpen Blue' || retrievedProd.store_id !== store.id) {
+      throw new Error('Failed to retrieve correct product or store_id');
     }
     console.log('✔ [5] Product retrieved successfully.');
 
@@ -117,7 +127,7 @@ export async function runRepositoryVerificationTest(): Promise<boolean> {
     }
     console.log('✔ [14] Confirmed: Soft-deleted records are excluded from normal queries.');
 
-    console.log('=== ALL 14 REPOSITORY VERIFICATION CRITERIA PASSED! ===');
+    console.log('=== ALL REPOSITORY VERIFICATION CRITERIA PASSED! ===');
     return true;
   } catch (error) {
     console.error('❌ REPOSITORY VERIFICATION TEST FAILED:', error);

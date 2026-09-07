@@ -1,7 +1,7 @@
 import { SQLiteDatabase } from 'expo-sqlite';
 import { SCHEMA_V1_QUERIES } from './schema';
 
-export const LATEST_VERSION = 3;
+export const LATEST_VERSION = 4;
 
 /**
  * Handles database schema creation and migration upgrades.
@@ -50,7 +50,21 @@ export async function runMigrations(db: SQLiteDatabase): Promise<void> {
     );
   }
 
-  // ── Step 4: Stamp schema version (must be outside a transaction on Android) ──
+  // ── Step 4: Add store_id column to products if not already present ──────────
+  const productTableInfo = await db.getAllAsync<{ name: string }>(
+    'PRAGMA table_info(products);'
+  );
+  const hasStoreId = productTableInfo.some((col) => col.name === 'store_id');
+  if (!hasStoreId) {
+    await db.execAsync(
+      'ALTER TABLE products ADD COLUMN store_id TEXT;'
+    );
+    await db.execAsync(
+      'CREATE INDEX IF NOT EXISTS idx_products_store ON products (store_id);'
+    );
+  }
+
+  // ── Step 5: Stamp schema version (must be outside a transaction on Android) ──
   await db.execAsync(`PRAGMA user_version = ${LATEST_VERSION};`);
 
   console.log(`[Database] Setup complete. Schema now at version ${LATEST_VERSION}.`);

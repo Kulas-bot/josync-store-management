@@ -5,9 +5,8 @@ import {
   View,
   ScrollView,
   TouchableOpacity,
-  Platform,
-  Modal,
   ActivityIndicator,
+  Modal,
   Alert,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -15,7 +14,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   MaterialCommunityIcons,
   FontAwesome5,
-  Feather,
 } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
@@ -23,28 +21,31 @@ import { RootStackParamList } from '../../navigation/AppNavigator';
 import BottomTabBar, { useBottomBarHeight } from '../../components/BottomTabBar';
 import HeaderBar from '../../components/HeaderBar';
 import { COLORS, SPACING, ROUNDS } from '../../theme';
-import { shoppingListService, StoreShoppingGroup, StoreShoppingItem } from '../../services/shoppingListService';
+import { shoppingListService, StoreShoppingItem } from '../../services/shoppingListService';
 import { productService } from '../../services/productService';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'ShoppingList'>;
+type Props = NativeStackScreenProps<RootStackParamList, 'StoreShoppingList'>;
 
-export default function ShoppingListScreen({ navigation }: Props) {
+export default function StoreShoppingListScreen({ route, navigation }: Props) {
+  const { storeId, storeName, listId } = route.params;
   const bottomBarHeight = useBottomBarHeight();
-  const [storeGroups, setStoreGroups] = useState<StoreShoppingGroup[]>([]);
-  const [listId, setListId] = useState<string | null>(null);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [loading, setLoading] = useState(true);
 
-  const loadData = async () => {
+  const [items, setItems] = useState<StoreShoppingItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [modalVisible, setModalVisible] = useState(false);
+
+  const loadStoreItems = async () => {
     try {
       setLoading(true);
-      const list = await shoppingListService.getOrCreateActiveShoppingList();
-      setListId(list.id);
-
-      const groups = await shoppingListService.getStoreGroupedShoppingItems(list.id);
-      setStoreGroups(groups);
+      const groups = await shoppingListService.getStoreGroupedShoppingItems(listId);
+      const matchedGroup = groups.find((g) => g.storeId === storeId);
+      if (matchedGroup) {
+        setItems(matchedGroup.items);
+      } else {
+        setItems([]);
+      }
     } catch (err) {
-      console.error('Failed to load shopping list data:', err);
+      console.error('Failed to load store items:', err);
     } finally {
       setLoading(false);
     }
@@ -52,23 +53,30 @@ export default function ShoppingListScreen({ navigation }: Props) {
 
   useFocusEffect(
     useCallback(() => {
-      loadData();
-    }, [])
+      loadStoreItems();
+    }, [listId, storeId])
   );
 
-  const allItems: StoreShoppingItem[] = storeGroups.flatMap((g) => g.items);
-  const totalProducts = allItems.length;
-  const lowStockCount = allItems.filter((p) => p.statusAtCreation === 'low').length;
-  const outOfStockCount = allItems.filter((p) => p.statusAtCreation === 'out').length;
-  const purchasedCount = allItems.filter((p) => p.purchased).length;
+  const toggleItem = async (itemId: string) => {
+    const item = items.find((i) => i.id === itemId);
+    if (!item) return;
+
+    try {
+      const newStatus = !item.purchased;
+      await shoppingListService.markItemAsPurchased(itemId, newStatus);
+      setItems((prev) =>
+        prev.map((i) => (i.id === itemId ? { ...i, purchased: newStatus } : i))
+      );
+    } catch (err) {
+      console.error('Failed to toggle item:', err);
+    }
+  };
 
   const executeCompletion = async (itemsToComplete: StoreShoppingItem[]) => {
-    if (!listId) return;
-
     try {
       setLoading(true);
 
-      // 1. Update stock status of all specified products to 'high' (Marami)
+      // 1. Update stock status of all products to 'high' (Marami)
       for (const item of itemsToComplete) {
         await productService.updateStockStatus(item.productId, 'high', true);
       }
@@ -80,8 +88,16 @@ export default function ShoppingListScreen({ navigation }: Props) {
         }
       }
 
-      // 3. Complete the active shopping list
-      await shoppingListService.completeShoppingList(listId);
+      // 3. Complete the active shopping list if all items in the list are completed
+      const allGroups = await shoppingListService.getStoreGroupedShoppingItems(listId);
+      const totalRemainingUnchecked = allGroups
+        .flatMap((g) => g.items)
+        .filter((i) => !itemsToComplete.some((completed) => completed.id === i.id) && !i.purchased)
+        .length;
+
+      if (totalRemainingUnchecked === 0) {
+        await shoppingListService.completeShoppingList(listId);
+      }
 
       setModalVisible(false);
       navigation.navigate('Dashboard');
@@ -93,31 +109,24 @@ export default function ShoppingListScreen({ navigation }: Props) {
   };
 
   const handleTapFinish = async () => {
-    if (!listId || allItems.length === 0) return;
+    if (items.length === 0) return;
 
-    const hasUnchecked = allItems.some((p) => !p.purchased);
-
+    const hasUnchecked = items.some((i) => !i.purchased);
     if (hasUnchecked) {
-      // Case 2: Some products are unchecked -> Show confirmation dialog
       setModalVisible(true);
     } else {
-      // Case 1: All products are checked -> Complete directly without confirmation dialog
-      await executeCompletion(allItems);
+      await executeCompletion(items);
     }
   };
 
   const handleConfirmAllPurchased = async () => {
-    await executeCompletion(allItems);
+    await executeCompletion(items);
   };
 
-  const handleStorePress = (group: StoreShoppingGroup) => {
-    if (!listId) return;
-    navigation.navigate('StoreShoppingList', {
-      storeId: group.storeId,
-      storeName: group.storeName,
-      listId: listId,
-    });
-  };
+  const totalProducts = items.length;
+  const lowStockCount = items.filter((i) => i.statusAtCreation === 'low').length;
+  const outOfStockCount = items.filter((i) => i.statusAtCreation === 'out').length;
+  const purchasedCount = items.filter((i) => i.purchased).length;
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -134,14 +143,14 @@ export default function ShoppingListScreen({ navigation }: Props) {
         {/* 2. Subheader Area */}
         <View style={styles.subheader}>
           <View style={styles.subheaderLeft}>
-            <Text style={styles.planLabel}>BIBILHIN SA SABADO</Text>
-            <Text style={styles.subheaderTitle}>Listahan ng Bibilhin</Text>
+            <Text style={styles.planLabel}>MGA BIBILHIN SA TINDAHAN</Text>
+            <Text style={styles.subheaderTitle}>{storeName}</Text>
             <Text style={styles.subheaderSubtitle}>
-              Naka-grupo ayon sa tindahan kung saan ito binibili. Pumili ng tindahan para makita ang mga bibilhin.
+              {purchasedCount} ng {totalProducts} paninda ang nabili na sa tindahang ito.
             </Text>
           </View>
-          <View style={styles.basketIconCircle}>
-            <FontAwesome5 name="shopping-basket" size={20} color={COLORS.primary} />
+          <View style={styles.storeIconCircle}>
+            <FontAwesome5 name="store" size={20} color={COLORS.primary} />
           </View>
         </View>
 
@@ -149,22 +158,19 @@ export default function ShoppingListScreen({ navigation }: Props) {
           <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 40 }} />
         ) : (
           <>
-            {/* 3. Summary Card */}
+            {/* 3. Summary Cards */}
             <View style={styles.summaryCard}>
               <View style={styles.summaryBadge}>
                 <Text style={styles.summaryBadgeText}>{totalProducts}</Text>
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.summaryTitle}>Kabuuang Paninda</Text>
+              <View>
+                <Text style={styles.summaryTitle}>Mga Bibilhin Dito</Text>
                 <Text style={styles.summarySubtitle}>
-                  {purchasedCount > 0 ? `${purchasedCount} ng ${totalProducts} ang nabili na` : 'Handa nang bilhin'}
+                  {purchasedCount === totalProducts && totalProducts > 0
+                    ? 'Kumpleto na ang pagbili sa tindahang ito!'
+                    : 'I-check ang mga panindang nabili na'}
                 </Text>
               </View>
-              {storeGroups.length > 0 && (
-                <View style={styles.storeCountBadge}>
-                  <Text style={styles.storeCountBadgeText}>{storeGroups.length} tindahan</Text>
-                </View>
-              )}
             </View>
 
             {/* Split Stats row */}
@@ -182,86 +188,89 @@ export default function ShoppingListScreen({ navigation }: Props) {
               </View>
             </View>
 
-            {/* 4. Store Groups Section */}
-            <View style={styles.sectionHeaderContainer}>
-              <Text style={styles.sectionHeaderTitle}>MGA TINDAHAN ({storeGroups.length})</Text>
-            </View>
+            {/* 4. Product Checklist */}
+            <View style={styles.itemsSection}>
+              <Text style={styles.sectionHeaderTitle}>LISTAHAN NG MGA PANINDA</Text>
 
-            {storeGroups.length === 0 ? (
-              <View style={styles.emptyContainer}>
-                <MaterialCommunityIcons name="clipboard-text-outline" size={48} color={COLORS.textMuted} style={{ marginBottom: 12 }} />
-                <Text style={styles.emptyTitle}>Walang laman ang listahan ngayon</Text>
-                <Text style={styles.emptySubtitle}>
-                  Awtomatikong maidaragdag dito ang mga panindang maubusan o kakaunti ang stock.
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.storeListContainer}>
-                {storeGroups.map((group) => {
-                  const isUnassigned = group.storeId === null;
-                  const isStoreComplete = group.purchasedCount === group.totalCount && group.totalCount > 0;
+              {items.length === 0 ? (
+                <Text style={styles.emptyText}>Walang paninda para sa tindahang ito.</Text>
+              ) : (
+                <View style={styles.itemsList}>
+                  {items.map((item) => {
+                    const isChecked = item.purchased;
+                    const isOut = item.statusAtCreation === 'out';
 
-                  return (
-                    <TouchableOpacity
-                      key={group.storeId ?? '__unassigned__'}
-                      style={[
-                        styles.storeCard,
-                        isStoreComplete && styles.storeCardComplete,
-                      ]}
-                      activeOpacity={0.75}
-                      onPress={() => handleStorePress(group)}
-                    >
-                      {/* Store Icon */}
-                      <View style={[
-                        styles.storeIconWrapper,
-                        isStoreComplete && styles.storeIconWrapperComplete,
-                        isUnassigned && styles.storeIconWrapperUnassigned,
-                      ]}>
-                        <MaterialCommunityIcons
-                          name={isUnassigned ? 'package-variant-closed' : isStoreComplete ? 'check' : 'storefront-outline'}
-                          size={22}
-                          color={isStoreComplete ? '#10B981' : COLORS.primary}
-                        />
-                      </View>
+                    return (
+                      <TouchableOpacity
+                        key={item.id}
+                        style={[
+                          styles.productCard,
+                          isChecked ? styles.productCardChecked : styles.productCardUnchecked,
+                        ]}
+                        onPress={() => toggleItem(item.id)}
+                        activeOpacity={0.8}
+                      >
+                        <View style={styles.productLeft}>
+                          {/* Checkbox circle */}
+                          <View
+                            style={[
+                              styles.checkboxCircle,
+                              isChecked
+                                ? styles.checkboxCircleChecked
+                                : styles.checkboxCircleUnchecked,
+                            ]}
+                          >
+                            {isChecked && (
+                              <MaterialCommunityIcons name="check" size={14} color="#FFFFFF" />
+                            )}
+                          </View>
 
-                      {/* Store Details */}
-                      <View style={styles.storeInfo}>
-                        <Text style={[styles.storeName, isStoreComplete && styles.storeNameComplete]}>
-                          {group.storeName}
-                        </Text>
-                        <Text style={styles.storeItemCount}>
-                          {group.totalCount} paninda • {group.purchasedCount > 0 ? `${group.purchasedCount} nabili na` : `${group.unpurchasedCount} bibilhin`}
-                        </Text>
-
-                        {/* Sub tags for Low / Out */}
-                        <View style={styles.storeTagsRow}>
-                          {group.outOfStockCount > 0 && (
-                            <View style={styles.outTag}>
-                              <Text style={styles.outTagText}>{group.outOfStockCount} Ubos</Text>
-                            </View>
-                          )}
-                          {group.lowStockCount > 0 && (
-                            <View style={styles.lowTag}>
-                              <Text style={styles.lowTagText}>{group.lowStockCount} Kaunti</Text>
-                            </View>
-                          )}
-                          {isStoreComplete && (
-                            <View style={styles.completeTag}>
-                              <Text style={styles.completeTagText}>Kumpleto</Text>
-                            </View>
-                          )}
+                          {/* Product Details */}
+                          <View style={styles.productTextContainer}>
+                            <Text
+                              style={[
+                                styles.productName,
+                                isChecked
+                                  ? styles.productNameChecked
+                                  : styles.productNameUnchecked,
+                              ]}
+                            >
+                              {item.productName}
+                            </Text>
+                            <Text style={styles.productCategory}>{item.categoryName}</Text>
+                          </View>
                         </View>
-                      </View>
 
-                      {/* Right Chevron & Arrow */}
-                      <View style={styles.storeRightAction}>
-                        <Feather name="chevron-right" size={20} color={COLORS.textMuted} />
-                      </View>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            )}
+                        {/* Right Status Badge */}
+                        <View
+                          style={[
+                            styles.statusBadge,
+                            isChecked
+                              ? styles.statusBadgeChecked
+                              : isOut
+                              ? styles.statusBadgeOut
+                              : styles.statusBadgeLow,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.statusBadgeText,
+                              isChecked
+                                ? styles.statusBadgeTextChecked
+                                : isOut
+                                ? styles.statusBadgeTextOut
+                                : styles.statusBadgeTextLow,
+                            ]}
+                          >
+                            {isChecked ? 'NABILI NA' : isOut ? 'UBOS' : 'KAUNTI'}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
           </>
         )}
 
@@ -274,22 +283,22 @@ export default function ShoppingListScreen({ navigation }: Props) {
         <TouchableOpacity
           style={[
             styles.finishButton,
-            (allItems.length === 0 || loading) && styles.finishButtonDisabled,
+            (items.length === 0 || loading) && styles.finishButtonDisabled,
           ]}
-          disabled={allItems.length === 0 || loading}
-          activeOpacity={allItems.length === 0 || loading ? 1 : 0.85}
+          disabled={items.length === 0 || loading}
+          activeOpacity={items.length === 0 || loading ? 1 : 0.85}
           onPress={handleTapFinish}
         >
           <MaterialCommunityIcons
             name="check-all"
             size={18}
-            color={allItems.length === 0 || loading ? '#8C827A' : '#FFFFFF'}
+            color={items.length === 0 || loading ? '#8C827A' : '#FFFFFF'}
             style={styles.finishIcon}
           />
           <Text
             style={[
               styles.finishButtonText,
-              (allItems.length === 0 || loading) && styles.finishButtonTextDisabled,
+              (items.length === 0 || loading) && styles.finishButtonTextDisabled,
             ]}
           >
             Tapusin ang Pagbili
@@ -308,7 +317,7 @@ export default function ShoppingListScreen({ navigation }: Props) {
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>May hindi ka na-check.</Text>
             <Text style={styles.modalMessage}>
-              Sigurado ka bang nabili mo lahat ng paninda sa listahan?
+              Sigurado ka bang nabili mo lahat ng paninda sa tindahang ito?
             </Text>
 
             <View style={styles.modalActions}>
@@ -379,7 +388,7 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     lineHeight: 18,
   },
-  basketIconCircle: {
+  storeIconCircle: {
     width: 44,
     height: 44,
     borderRadius: 8,
@@ -421,23 +430,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.textMuted,
   },
-  storeCountBadge: {
-    backgroundColor: '#FAF5EE',
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: 4,
-    borderRadius: ROUNDS.full,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  storeCountBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: COLORS.primary,
-  },
   statsRow: {
     flexDirection: 'row',
     gap: SPACING.sm,
-    marginBottom: SPACING.xl,
+    marginBottom: SPACING.lg,
   },
   statCard: {
     flex: 1,
@@ -464,125 +460,109 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     fontWeight: '600',
   },
-  sectionHeaderContainer: {
-    marginBottom: SPACING.sm,
-    paddingHorizontal: 2,
+  itemsSection: {
+    marginBottom: SPACING.lg,
   },
   sectionHeaderTitle: {
     fontSize: 12,
     fontWeight: 'bold',
     color: COLORS.textMuted,
     letterSpacing: 0.5,
+    marginBottom: SPACING.sm,
+    paddingHorizontal: 2,
   },
-  storeListContainer: {
+  emptyText: {
+    textAlign: 'center',
+    marginTop: 24,
+    color: COLORS.textMuted,
+    fontSize: 13,
+  },
+  itemsList: {
     gap: SPACING.sm,
-    marginBottom: SPACING.lg,
   },
-  storeCard: {
+  productCard: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     backgroundColor: COLORS.surface,
     borderRadius: ROUNDS.md,
     borderWidth: 1,
     borderColor: COLORS.border,
     padding: SPACING.md,
   },
-  storeCardComplete: {
-    backgroundColor: '#F8FAF9',
-    borderColor: '#D1E7DD',
+  productCardChecked: {
+    opacity: 0.55,
   },
-  storeIconWrapper: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#FCEAE3',
+  productCardUnchecked: {
+    opacity: 1,
+  },
+  productLeft: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: SPACING.md,
-  },
-  storeIconWrapperComplete: {
-    backgroundColor: '#E2F7E6',
-  },
-  storeIconWrapperUnassigned: {
-    backgroundColor: '#EFECE9',
-  },
-  storeInfo: {
+    gap: SPACING.md,
     flex: 1,
   },
-  storeName: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: COLORS.text,
-    marginBottom: 2,
-  },
-  storeNameComplete: {
-    color: '#2D8A4E',
-  },
-  storeItemCount: {
-    fontSize: 12,
-    color: COLORS.textMuted,
-    marginBottom: 4,
-  },
-  storeTagsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 4,
-    marginTop: 2,
-  },
-  outTag: {
-    backgroundColor: '#FCE4E4',
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: ROUNDS.full,
-  },
-  outTagText: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: '#D32F2F',
-  },
-  lowTag: {
-    backgroundColor: '#FDF0DC',
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: ROUNDS.full,
-  },
-  lowTagText: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: '#C87619',
-  },
-  completeTag: {
-    backgroundColor: '#E2F7E6',
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: ROUNDS.full,
-  },
-  completeTagText: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: '#2D8A4E',
-  },
-  storeRightAction: {
-    marginLeft: SPACING.sm,
-  },
-  emptyContainer: {
+  checkboxCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 40,
-    paddingHorizontal: SPACING.lg,
+    borderWidth: 2,
   },
-  emptyTitle: {
-    fontSize: 16,
+  checkboxCircleChecked: {
+    backgroundColor: '#10B981',
+    borderColor: '#10B981',
+  },
+  checkboxCircleUnchecked: {
+    backgroundColor: 'transparent',
+    borderColor: '#D1CAC2',
+  },
+  productTextContainer: {
+    flex: 1,
+  },
+  productName: {
+    fontSize: 15,
     fontWeight: '700',
-    color: COLORS.text,
-    marginBottom: 6,
-    textAlign: 'center',
   },
-  emptySubtitle: {
-    fontSize: 13,
+  productNameChecked: {
     color: COLORS.textMuted,
-    textAlign: 'center',
-    lineHeight: 18,
+    textDecorationLine: 'line-through',
+  },
+  productNameUnchecked: {
+    color: COLORS.text,
+  },
+  productCategory: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
+  statusBadge: {
+    borderRadius: ROUNDS.full,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 3,
+  },
+  statusBadgeChecked: {
+    backgroundColor: '#E2F7E6',
+  },
+  statusBadgeLow: {
+    backgroundColor: '#FDF0DC',
+  },
+  statusBadgeOut: {
+    backgroundColor: '#FCE4E4',
+  },
+  statusBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  statusBadgeTextChecked: {
+    color: '#2D8A4E',
+  },
+  statusBadgeTextLow: {
+    color: '#C87619',
+  },
+  statusBadgeTextOut: {
+    color: '#D32F2F',
   },
   stickyButtonContainer: {
     position: 'absolute',

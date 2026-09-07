@@ -36,10 +36,8 @@ type StockStatus = 'HIGH' | 'LOW' | 'OUT';
 
 interface ProductUI extends Product {
   iconName: string;
+  isRestockingLocked: boolean;
 }
-
-// ─── Mock Data ────────────────────────────────────────────────────────────────
-// Removed mock data
 
 // ─── Product Card Component ──────────────────────────────────────────────────
 
@@ -57,7 +55,12 @@ function ProductCard({ product, onPress, onActionPress, onDelete }: ProductCardP
   let statusDotColor = '#15803D';
   let labelText = 'Marami';
 
-  if (product.stock_status === 'low') {
+  if (product.isRestockingLocked) {
+    pillBg = '#FCEAE3';
+    pillText = COLORS.primary;
+    statusDotColor = product.stock_status === 'out' ? '#DC2626' : '#F59E0B';
+    labelText = product.stock_status === 'out' ? 'Ubos' : 'Kaunti';
+  } else if (product.stock_status === 'low') {
     pillBg = '#FDF0DC';
     pillText = '#C87619';
     statusDotColor = '#F59E0B';
@@ -71,19 +74,38 @@ function ProductCard({ product, onPress, onActionPress, onDelete }: ProductCardP
 
   return (
     <TouchableOpacity
-      style={styles.productCard}
+      style={[
+        styles.productCard,
+        product.isRestockingLocked && styles.productCardLocked,
+      ]}
       activeOpacity={0.75}
       onPress={() => onPress(product)}
     >
       {/* Icon badge left */}
-      <View style={styles.productIconBadge}>
-        <MaterialCommunityIcons name={product.iconName as any} size={22} color={COLORS.primary} />
+      <View style={[
+        styles.productIconBadge,
+        product.isRestockingLocked && styles.productIconBadgeLocked,
+      ]}>
+        <MaterialCommunityIcons
+          name={product.isRestockingLocked ? 'cart-arrow-down' : (product.iconName as any)}
+          size={22}
+          color={COLORS.primary}
+        />
       </View>
 
       {/* Name and status dot underneath */}
       <View style={styles.productDetails}>
-        <Text style={styles.productName}>{product.name}</Text>
-        <View style={[styles.statusDot, { backgroundColor: statusDotColor }]} />
+        <Text style={styles.productName} numberOfLines={1} ellipsizeMode="tail">
+          {product.name}
+        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <View style={[styles.statusDot, { backgroundColor: statusDotColor }]} />
+          {product.isRestockingLocked && (
+            <Text style={styles.lockedSubtext} numberOfLines={1} ellipsizeMode="tail">
+              Nasa Listahan ng Bibilhin
+            </Text>
+          )}
+        </View>
       </View>
 
       {/* Right container: Status pill + right three-dot menu button */}
@@ -112,7 +134,7 @@ export default function CategoryProductsScreen({ route, navigation }: Props) {
   const [selectedProduct, setSelectedProduct] = useState<ProductUI | null>(null);
   const [statusModalVisible, setStatusModalVisible] = useState(false);
   const [actionModalVisible, setActionModalVisible] = useState(false);
-  const [promptModalVisible, setPromptModalVisible] = useState(false);
+  const [addToListPrompt, setAddToListPrompt] = useState<{ visible: boolean; productId: string; productName: string }>({ visible: false, productId: '', productName: '' });
   
   const [products, setProducts] = useState<ProductUI[]>([]);
   const [loading, setLoading] = useState(true);
@@ -120,13 +142,23 @@ export default function CategoryProductsScreen({ route, navigation }: Props) {
   const loadData = async () => {
     try {
       setLoading(true);
-      const category = await categoryService.getCategoryById(categoryId);
-      const iconName = 'folder-outline'; // Category has no icon in DB
+      const iconName = 'folder-outline';
       
-      const categoryProducts = await productService.getProductsByCategory(categoryId);
+      const [categoryProducts, activeList] = await Promise.all([
+        productService.getProductsByCategory(categoryId),
+        shoppingListService.getActiveShoppingList(),
+      ]);
+
+      let activeItemProductIds = new Set<string>();
+      if (activeList) {
+        const activeItems = await shoppingListService.getShoppingListItems(activeList.id);
+        activeItemProductIds = new Set(activeItems.map((i) => i.product_id));
+      }
+
       const uiProducts: ProductUI[] = categoryProducts.map(p => ({
         ...p,
         iconName,
+        isRestockingLocked: activeItemProductIds.has(p.id) && p.stock_status !== 'high',
       }));
       setProducts(uiProducts);
     } catch (error) {
@@ -163,19 +195,30 @@ export default function CategoryProductsScreen({ route, navigation }: Props) {
 
   const handleStatusChange = async (newStatus: 'high' | 'low' | 'out') => {
     if (!selectedProduct) return;
+
+    // Check if user is trying to revert a locked product back to 'high' from Inventory
+    if (newStatus === 'high' && selectedProduct.isRestockingLocked) {
+      Alert.alert(
+        'Naka-lock ang Paninda (Restocking)',
+        `Ang "${selectedProduct.name}" ay kasalukuyang nasa Listahan ng Bibilhin para sa restocking.\n\nTapusin ang pagbili sa "Listahan ng Bibilhin" para maibalik ito sa Marami pagkatapos mabili.`
+      );
+      return;
+    }
+
     setStatusModalVisible(false);
+
+    const productName = selectedProduct.name;
+    const productId = selectedProduct.id;
 
     try {
       if (selectedProduct.stock_status !== newStatus) {
-        await productService.updateStockStatus(selectedProduct.id, newStatus);
-        
-        // If changed to low or out, ask if user wants to add it to Shopping List
+        await productService.updateStockStatus(productId, newStatus);
+
+        // When transitioning to 'low' or 'out', show custom prompt
         if (newStatus === 'low' || newStatus === 'out') {
-          const isAlreadyOnList = await shoppingListService.isProductOnActiveShoppingList(selectedProduct.id);
-          if (!isAlreadyOnList) {
-            setPromptModalVisible(true);
-            return;
-          }
+          await loadData();
+          setAddToListPrompt({ visible: true, productId, productName });
+          return;
         }
       }
       await loadData();
@@ -184,17 +227,19 @@ export default function CategoryProductsScreen({ route, navigation }: Props) {
     }
   };
 
-  const handleAddToShoppingList = async () => {
-    if (!selectedProduct) return;
-    setPromptModalVisible(false);
+  const handleAddToListConfirm = async () => {
+    const { productId, productName } = addToListPrompt;
+    setAddToListPrompt({ visible: false, productId: '', productName: '' });
     try {
-      await shoppingListService.addProductToShoppingList(selectedProduct.id);
-      Alert.alert('Tagumpay', `Naidagdag ang "${selectedProduct.name}" sa listahan ng bibilhin.`);
+      await shoppingListService.addProductToShoppingList(productId);
+      await loadData();
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Hindi naidagdag sa listahan.');
-    } finally {
-      await loadData();
     }
+  };
+
+  const handleAddToListDismiss = () => {
+    setAddToListPrompt({ visible: false, productId: '', productName: '' });
   };
 
   const handleAddProduct = () => {
@@ -477,30 +522,55 @@ export default function CategoryProductsScreen({ route, navigation }: Props) {
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Baguhin ang Stock Status</Text>
             <Text style={styles.modalSubTitle}>{selectedProduct?.name}</Text>
+
+            {selectedProduct?.isRestockingLocked && (
+              <View style={styles.lockedNoticeBox}>
+                <Text style={styles.lockedNoticeText}>
+                  Nasa restocking workflow ang panindang ito. Tapusin ang pagbili sa Listahan para maibalik sa Marami.
+                </Text>
+              </View>
+            )}
             
             <View style={styles.statusOptionsContainer}>
+              {/* Marami */}
               <TouchableOpacity
-                style={[styles.statusOptionBtn, { backgroundColor: '#E2F7E6', borderColor: '#2D8A4E' }]}
+                style={[
+                  styles.statusOptionBtn,
+                  selectedProduct?.isRestockingLocked
+                    ? styles.statusOptionBtnLocked
+                    : { backgroundColor: '#E2F7E6', borderColor: '#2D8A4E' }
+                ]}
                 onPress={() => handleStatusChange('high')}
+                activeOpacity={selectedProduct?.isRestockingLocked ? 1 : 0.8}
               >
-                <View style={[styles.statusDot, { backgroundColor: '#15803D', marginRight: 8 }]} />
-                <Text style={[styles.statusOptionText, { color: '#2D8A4E' }]}>Marami (Plentiful)</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                  <View style={[styles.statusDot, { backgroundColor: selectedProduct?.isRestockingLocked ? '#8C827A' : '#15803D', marginRight: 8 }]} />
+                  <Text style={[styles.statusOptionText, { color: selectedProduct?.isRestockingLocked ? '#8C827A' : '#2D8A4E' }]}>
+                    Marami (Plentiful)
+                  </Text>
+                </View>
               </TouchableOpacity>
 
+              {/* Kaunti */}
               <TouchableOpacity
                 style={[styles.statusOptionBtn, { backgroundColor: '#FDF0DC', borderColor: '#C87619' }]}
                 onPress={() => handleStatusChange('low')}
               >
-                <View style={[styles.statusDot, { backgroundColor: '#F59E0B', marginRight: 8 }]} />
-                <Text style={[styles.statusOptionText, { color: '#C87619' }]}>Kaunti (Low Stock)</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                  <View style={[styles.statusDot, { backgroundColor: '#F59E0B', marginRight: 8 }]} />
+                  <Text style={[styles.statusOptionText, { color: '#C87619' }]}>Kaunti (Low Stock)</Text>
+                </View>
               </TouchableOpacity>
 
+              {/* Ubos */}
               <TouchableOpacity
                 style={[styles.statusOptionBtn, { backgroundColor: '#FCE4E4', borderColor: '#D32F2F' }]}
                 onPress={() => handleStatusChange('out')}
               >
-                <View style={[styles.statusDot, { backgroundColor: '#DC2626', marginRight: 8 }]} />
-                <Text style={[styles.statusOptionText, { color: '#D32F2F' }]}>Ubos (Out of Stock)</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                  <View style={[styles.statusDot, { backgroundColor: '#DC2626', marginRight: 8 }]} />
+                  <Text style={[styles.statusOptionText, { color: '#D32F2F' }]}>Ubos (Out of Stock)</Text>
+                </View>
               </TouchableOpacity>
             </View>
 
@@ -508,7 +578,7 @@ export default function CategoryProductsScreen({ route, navigation }: Props) {
               style={styles.modalCancelBtn}
               onPress={() => setStatusModalVisible(false)}
             >
-              <Text style={styles.modalCancelBtnText}>Kanselahin</Text>
+              <Text style={styles.modalCancelBtnText}>Isara</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -523,8 +593,8 @@ export default function CategoryProductsScreen({ route, navigation }: Props) {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>I-manage ang Paninda</Text>
-            <Text style={styles.modalSubTitle}>{selectedProduct?.name}</Text>
+            <Text style={[styles.modalTitle, { textAlign: 'center' }]}>I-manage ang Paninda</Text>
+            <Text style={[styles.modalSubTitle, { textAlign: 'center' }]}>{selectedProduct?.name}</Text>
             
             <View style={styles.statusOptionsContainer}>
               <TouchableOpacity
@@ -548,40 +618,33 @@ export default function CategoryProductsScreen({ route, navigation }: Props) {
           </View>
         </View>
       </Modal>
-
-      {/* Suggest Add to Shopping List Prompt Modal */}
+      {/* Idagdag sa Listahan? Confirmation Modal */}
       <Modal
         animationType="fade"
         transparent={true}
-        visible={promptModalVisible}
-        onRequestClose={() => {
-          setPromptModalVisible(false);
-          loadData();
-        }}
+        visible={addToListPrompt.visible}
+        onRequestClose={handleAddToListDismiss}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Idagdag sa Listahan?</Text>
-            <Text style={styles.modalMessage}>
-              Gusto mo bang idagdag ang "{selectedProduct?.name}" sa listahan ng mga bibilhin?
+          <View style={styles.confirmModalContent}>
+            <Text style={styles.confirmModalTitle}>Idagdag sa Listahan?</Text>
+            <Text style={styles.confirmModalMessage}>
+              Gusto mo bang idagdag ang "{addToListPrompt.productName}" sa listahan ng mga bibilhin?
             </Text>
-
-            <View style={styles.modalActions}>
+            <View style={styles.confirmModalActions}>
               <TouchableOpacity
-                style={[styles.modalBtn, styles.modalBtnCancel]}
-                onPress={() => {
-                  setPromptModalVisible(false);
-                  loadData();
-                }}
+                style={styles.confirmBtnCancel}
+                activeOpacity={0.8}
+                onPress={handleAddToListDismiss}
               >
-                <Text style={styles.modalBtnCancelText}>Hindi Muna</Text>
+                <Text style={styles.confirmBtnCancelText}>Hindi Muna</Text>
               </TouchableOpacity>
-
               <TouchableOpacity
-                style={[styles.modalBtn, styles.modalBtnFinish]}
-                onPress={handleAddToShoppingList}
+                style={styles.confirmBtnAdd}
+                activeOpacity={0.8}
+                onPress={handleAddToListConfirm}
               >
-                <Text style={styles.modalBtnFinishText}>Idagdag</Text>
+                <Text style={styles.confirmBtnAddText}>Idagdag</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -598,10 +661,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
-
-
-
-  // ── Category Header & Actions ──
   categoryHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -614,9 +673,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-  },
-  backButton: {
-    marginRight: SPACING.md,
   },
   categoryTitleContainer: {
     flex: 1,
@@ -636,11 +692,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: SPACING.sm,
   },
-  actionIconBtn: {
-    padding: SPACING.xs,
-  },
-
-  // ── Search Section ──
   searchSection: {
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.xs,
@@ -648,7 +699,7 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3EDE4', // soft gray-cream background
+    backgroundColor: '#F3EDE4',
     borderRadius: ROUNDS.md,
     paddingHorizontal: SPACING.md,
     paddingVertical: Platform.OS === 'ios' ? 12 : 8,
@@ -662,8 +713,6 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     padding: 0,
   },
-
-  // ── Filter Section ──
   filterSection: {
     paddingVertical: SPACING.md,
   },
@@ -716,11 +765,9 @@ const styles = StyleSheet.create({
   pillBadgeTextInactive: {
     color: COLORS.text,
   },
-
-  // ── Product List ──
   listContent: {
     paddingHorizontal: SPACING.lg,
-    paddingBottom: 100, // Safe padding for FAB
+    paddingBottom: 100,
     gap: SPACING.sm,
   },
   productCard: {
@@ -732,62 +779,61 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
+  productCardLocked: {
+    borderColor: '#F0D5C9',
+    backgroundColor: '#FFFCFA',
+  },
   productIconBadge: {
     width: 48,
     height: 48,
     borderRadius: 8,
-    backgroundColor: '#FAF5EE', // soft cream background for line art badge
+    backgroundColor: '#FAF5EE',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: SPACING.md,
   },
+  productIconBadgeLocked: {
+    backgroundColor: '#FCEAE3',
+  },
   productDetails: {
     flex: 1,
     justifyContent: 'center',
+    marginRight: SPACING.sm,
   },
   productName: {
     fontSize: 15,
     fontWeight: '700',
     color: COLORS.text,
-    marginBottom: SPACING.xs,
+    marginBottom: 2,
   },
   statusDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
   },
+  lockedSubtext: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: COLORS.primary,
+    flexShrink: 1,
+  },
   productRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.sm,
+    gap: SPACING.xs,
+    flexShrink: 0,
   },
   statusPill: {
     borderRadius: ROUNDS.full,
-    paddingHorizontal: SPACING.md,
+    paddingHorizontal: SPACING.sm,
     paddingVertical: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   statusPillText: {
     fontSize: 11,
     fontWeight: '700',
   },
-  deleteIconCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#FDE8E8',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  editIconCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#E8F0FE',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  // Empty List
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -797,11 +843,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: COLORS.textMuted,
   },
-
-  // ── FAB ──
   fab: {
     position: 'absolute',
-    bottom: 84, // Stits just above tab bar
+    bottom: 84,
     right: SPACING.lg,
     backgroundColor: COLORS.primary,
     borderRadius: ROUNDS.full,
@@ -821,8 +865,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginLeft: SPACING.xs,
   },
-
-  // ── Bottom Nav ──
   bottomTabBar: {
     height: 68,
     backgroundColor: COLORS.background,
@@ -878,46 +920,30 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: COLORS.text,
     marginBottom: SPACING.xs,
+    textAlign: 'center',
   },
   modalSubTitle: {
     fontSize: 14,
     color: COLORS.textMuted,
     marginBottom: SPACING.md,
+    textAlign: 'center',
   },
-  modalMessage: {
-    fontSize: 13,
-    color: COLORS.textMuted,
-    lineHeight: 18,
-    marginBottom: SPACING.md,
-  },
-  modalActions: {
-    flexDirection: 'row',
-    gap: SPACING.sm,
-  },
-  modalBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: ROUNDS.full,
+  lockedNoticeBox: {
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#FCEAE3',
+    padding: SPACING.sm,
+    borderRadius: ROUNDS.sm,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: '#F0D5C9',
   },
-  modalBtnCancel: {
-    backgroundColor: 'transparent',
-    borderWidth: 1.5,
-    borderColor: COLORS.border,
-  },
-  modalBtnCancelText: {
-    color: COLORS.textMuted,
-    fontSize: 13,
-    fontWeight: 'bold',
-  },
-  modalBtnFinish: {
-    backgroundColor: COLORS.primary,
-  },
-  modalBtnFinishText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: 'bold',
+  lockedNoticeText: {
+    fontSize: 11,
+    color: COLORS.primary,
+    lineHeight: 15,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   statusOptionsContainer: {
     gap: SPACING.sm,
@@ -926,10 +952,16 @@ const styles = StyleSheet.create({
   statusOptionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: ROUNDS.md,
     borderWidth: 1,
+  },
+  statusOptionBtnLocked: {
+    backgroundColor: '#EFECE9',
+    borderColor: '#D1CAC2',
+    opacity: 0.65,
   },
   statusOptionText: {
     fontSize: 14,
@@ -944,5 +976,59 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     fontSize: 13,
     fontWeight: 'bold',
+  },
+
+  // ── Idagdag sa Listahan? Confirm Modal ──
+  confirmModalContent: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 20,
+    padding: SPACING.lg,
+    width: '100%',
+    maxWidth: 340,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  confirmModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    marginBottom: 10,
+  },
+  confirmModalMessage: {
+    fontSize: 16,
+    color: COLORS.textMuted,
+    lineHeight: 24,
+    marginBottom: SPACING.lg,
+  },
+  confirmModalActions: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  confirmBtnCancel: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: ROUNDS.full,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confirmBtnCancelText: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: COLORS.text,
+  },
+  confirmBtnAdd: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: ROUNDS.full,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confirmBtnAddText: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
   },
 });

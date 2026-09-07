@@ -7,6 +7,7 @@ import CategoryProductsScreen from '../screens/CategoryProducts/CategoryProducts
 import AddCategoryScreen from '../screens/Inventory/AddCategoryScreen';
 import AddProductScreen from '../screens/Inventory/AddProductScreen';
 import ShoppingListScreen from '../screens/ShoppingList/ShoppingListScreen';
+import StoreShoppingListScreen from '../screens/ShoppingList/StoreShoppingListScreen';
 import SalesScreen from '../screens/Sales/SalesScreen';
 import LedgerScreen from '../screens/Ledger/LedgerScreen';
 import BorrowerDetailsScreen from '../screens/Ledger/BorrowerDetailsScreen';
@@ -28,6 +29,7 @@ export type RootStackParamList = {
   AddCategory: { editCategoryId?: string } | undefined;
   AddProduct: { categoryId: string; categoryName: string; editProductId?: string };
   ShoppingList: undefined;
+  StoreShoppingList: { storeId: string | null; storeName: string; listId: string };
   DailySales: undefined;
   SalesHistory: undefined;
   Ledger: undefined;
@@ -59,6 +61,7 @@ export default function AppNavigator() {
         <Stack.Screen name="AddCategory" component={AddCategoryScreen} />
         <Stack.Screen name="AddProduct" component={AddProductScreen} />
         <Stack.Screen name="ShoppingList" component={ShoppingListScreen} />
+        <Stack.Screen name="StoreShoppingList" component={StoreShoppingListScreen} />
         <Stack.Screen name="DailySales" component={SalesScreen} />
         <Stack.Screen name="SalesHistory" component={SalesHistoryScreen} />
         <Stack.Screen name="Ledger" component={LedgerScreen} />

@@ -1,4 +1,5 @@
 export * from './categoryService';
+export * from './storeService';
 export * from './productService';
 export * from './borrowerService';
 export * from './paymentService';
